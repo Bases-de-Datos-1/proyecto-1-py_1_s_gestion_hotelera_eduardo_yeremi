@@ -116,6 +116,16 @@ CREATE TABLE HabitacionesEmpresa (
     CONSTRAINT FK_HabitacionesEmpresa_Habitacion FOREIGN KEY (IdHabitacion) REFERENCES DatosHabitacion(IdDatosHabitacion)
 );
 
+-- Tabla: TipoGabitacionEmpresa
+CREATE TABLE TipoHabitacionEmpresa (
+    IdTipoHabitacion SMALLINT NOT NULL,
+    IdEmpresa VARCHAR(15) NOT NULL,  
+    PRIMARY KEY (IdTipoHabitacion, IdEmpresa), 
+    CONSTRAINT FK_TipoHabitacion_EmpresaHospedaje FOREIGN KEY (IdTipoHabitacion) REFERENCES TipoHabitacion(IdTipoHabitacion) ON DELETE CASCADE,
+    CONSTRAINT FK_IdEmpresaHospedaje_Tipo FOREIGN KEY (IdEmpresa) REFERENCES EmpresaHospedaje(CedulaJuridica)
+);
+
+
 -- Tabla: Comodidad
 CREATE TABLE Comodidad (
     IdComodidad SMALLINT IDENTITY(1,1) PRIMARY KEY,
@@ -195,8 +205,11 @@ CREATE TABLE ServiciosRecreacion (
 -- Tabla: Actividad
 CREATE TABLE Actividad (
     IdActividad SMALLINT IDENTITY(1,1) PRIMARY KEY,
+    IdEmpresa VARCHAR(15) NOT NULL,
     NombreActividad VARCHAR(30) NOT NULL,
-    DescripcionActividad VARCHAR(100) NOT NULL
+    DescripcionActividad VARCHAR(100) NOT NULL,
+    CONSTRAINT FK_ Actividad_EmpresaRecreacion FOREIGN KEY (IdEmpresa) REFERENCES EmpresaRecreacion(CedulaJuridica)
+
 );
 
 -- Tabla: ListaActividades
@@ -260,6 +273,7 @@ END;
 -- Videito sobre procedure: https://www.youtube.com/watch?v=8sCrjt5e2Yk&ab_channel=INFORMATICONFIG
 -- ========================== Para la tabla de Direccion:
 -- Agregar nuevas direcciones.
+
 CREATE PROCEDURE sp_AgregarDireccion
     @Provincia VARCHAR(20),
     @Canton VARCHAR(30),
@@ -276,7 +290,58 @@ BEGIN
     SET @NuevoIdDireccion = SCOPE_IDENTITY();
 END;
 
+-- Editar
+CREATE PROCEDURE sp_ActualizarDireccion
+    @IdDireccion SMALLINT,
+    @Provincia VARCHAR(20),
+    @Canton VARCHAR(30),
+    @Distrito VARCHAR(30),
+    @Barrio VARCHAR(40),
+    @SenasExactas VARCHAR(150),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
 
+    IF EXISTS (SELECT 1 FROM Direccion WHERE IdDireccion = @IdDireccion)
+    BEGIN
+        UPDATE Direccion
+        SET Provincia = @Provincia,
+            Canton = @Canton,
+            Distrito = @Distrito,
+            Barrio = @Barrio,
+            SenasExactas = @SenasExactas
+        WHERE IdDireccion = @IdDireccion;
+
+        SET @Resultado = 1;  
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
+
+-- Eliminar:
+CREATE PROCEDURE sp_EliminarDireccion
+    @IdDireccion SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Para poder eliminar, la asociacion con cliente o empresas no debe de existir.
+    IF NOT EXISTS (SELECT 1 FROM Cliente WHERE IdDireccion = @IdDireccion)
+    AND NOT EXISTS (SELECT 1 FROM EmpresaHospedaje WHERE IdDireccion = @IdDireccion)
+    AND NOT EXISTS (SELECT 1 FROM EmpresaRecreacion WHERE IdDireccion = @IdDireccion)
+    BEGIN
+        DELETE FROM Direccion WHERE IdDireccion = @IdDireccion;
+        SET @Resultado = 1;  -- Se pudo eliminar
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  -- -1 Significa que hay un error y no se pudo eliminar, (Esta registrado en una tabla)
+    END
+END;
 
 -- ========================== Para la tabla de TipoInstalacion:
 
@@ -302,8 +367,55 @@ BEGIN
 END;
 
 -- Editar
+CREATE PROCEDURE sp_ActualizarTipoInstalacion
+    @IdTipoInstalacion SMALLINT,
+    @NombreInstalacion VARCHAR(30),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM TipoInstalacion WHERE IdTipoInstalacion = @IdTipoInstalacion) -- Revisar que el id ingresado exista
+    BEGIN
+        -- Verificar que el nombre que se vaya a agregar no este previamente registrado
+        IF NOT EXISTS (SELECT 1 FROM TipoInstalacion WHERE NombreInstalacion = @NombreInstalacion AND IdTipoInstalacion <> @IdTipoInstalacion)-- IdTipoInstalacion <> @IdTipoInstalacion: Esto verifica en las tablas en donde ese id es diferente del actual
+        BEGIN
+            UPDATE TipoInstalacion
+            SET NombreInstalacion = @NombreInstalacion
+            WHERE IdTipoInstalacion = @IdTipoInstalacion;
+
+            SET @Resultado = 1;  -- Éxito
+        END
+        ELSE
+        BEGIN
+            SET @Resultado = -2;  -- Ya existe una instalacion con ese nombre.
+        END
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  -- No se encontro 
+    END
+END;
 
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarTipoInstalacion
+    @IdTipoInstalacion SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Que una empresa no tenga esta instalacion en uso
+    IF NOT EXISTS (SELECT 1 FROM EmpresaHospedaje WHERE IdTipoHotel = @IdTipoInstalacion)
+    BEGIN
+        DELETE FROM TipoInstalacion WHERE IdTipoInstalacion = @IdTipoInstalacion;
+        SET @Resultado = 1;  
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
 
 -- ========================== Para la tabla de EmpresaHospedaje:
 -- Agregar
@@ -315,25 +427,98 @@ CREATE PROCEDURE sp_AgregarEmpresaHospedaje
     @ReferenciaGPS GEOGRAPHY,
     @CorreoElectronico VARCHAR(50),
     @SitioWeb VARCHAR(50) NULL,
-    @Telefono VARCHAR(15)
+    @Telefono VARCHAR(15),
+    @Resultado SMALLINT OUTPUT -- Se añade para manejar errores
 AS
 BEGIN
     SET NOCOUNT ON;
 
+    -- Verificar que la empresa no exista y que el correo y teléfono sean únicos
     IF NOT EXISTS (SELECT 1 FROM EmpresaHospedaje WHERE CedulaJuridica = @CedulaJuridica)
+    AND NOT EXISTS (SELECT 1 FROM EmpresaHospedaje WHERE CorreoElectronico = @CorreoElectronico)
+    AND NOT EXISTS (SELECT 1 FROM EmpresaHospedaje WHERE Telefono = @Telefono)
     BEGIN
         INSERT INTO EmpresaHospedaje (CedulaJuridica, NombreHotel, IdTipoHotel, IdDireccion, ReferenciaGPS, CorreoElectronico, SitioWeb, Telefono)
         VALUES (@CedulaJuridica, @NombreHotel, @IdTipoHotel, @IdDireccion, @ReferenciaGPS, @CorreoElectronico, @SitioWeb, @Telefono);
+
+        SET @Resultado = 1;  -- Exito
     END
     ELSE
     BEGIN
-        PRINT 'Error: Ya existe una empresa con esta cédula.';
+        SET @Resultado = -1; -- Empresa existente.
     END
 END;
 
+
 -- Editar
+CREATE PROCEDURE sp_ActualizarEmpresaHospedaje
+    @CedulaJuridica VARCHAR(15),
+    @NombreHotel VARCHAR(50),
+    @IdTipoHotel SMALLINT,
+    @IdDireccion SMALLINT,
+    @ReferenciaGPS GEOGRAPHY,
+    @CorreoElectronico VARCHAR(50),
+    @SitioWeb VARCHAR(50),
+    @Telefono VARCHAR(15),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM EmpresaHospedaje WHERE CedulaJuridica = @CedulaJuridica) -- revisar que la mepresa exista
+    BEGIN
+        -- revisar que el correo y el telefono no esten siendo usados.
+        IF NOT EXISTS (SELECT 1 FROM EmpresaHospedaje WHERE CorreoElectronico = @CorreoElectronico AND CedulaJuridica <> @CedulaJuridica)
+        AND NOT EXISTS (SELECT 1 FROM EmpresaHospedaje WHERE Telefono = @Telefono AND CedulaJuridica <> @CedulaJuridica)
+        BEGIN
+            UPDATE EmpresaHospedaje
+            SET NombreHotel = @NombreHotel,
+                IdTipoHotel = @IdTipoHotel,
+                IdDireccion = @IdDireccion,
+                ReferenciaGPS = @ReferenciaGPS,
+                CorreoElectronico = @CorreoElectronico,
+                SitioWeb = @SitioWeb,
+                Telefono = @Telefono
+            WHERE CedulaJuridica = @CedulaJuridica;
+
+            SET @Resultado = 1;  -- Exito
+        END
+        ELSE
+        BEGIN
+            SET @Resultado = -2;  -- Correo o email registrados
+        END
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  -- Empresa no registrada
+    END
+END;
 
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarEmpresaHospedaje
+    @CedulaJuridica VARCHAR(15),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Revisar que la empresa no tenga facturaciones con reservas que aún no han salido
+    IF NOT EXISTS (
+        SELECT 1 FROM Facturacion F
+        JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+        JOIN HabitacionesEmpresa H ON R.IdHabitacion = H.IdHabitacion
+        WHERE H.IdEmpresa = @CedulaJuridica AND R.FechaHoraSalida > GETDATE()
+    )
+    BEGIN
+        DELETE FROM EmpresaHospedaje WHERE CedulaJuridica = @CedulaJuridica;
+        SET @Resultado = 1;  -- Exito
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  -- Hay reservas activas.
+    END
+END;
+
 
 -- ========================== Para la tabla de ServiciosEstablecimiento:
 -- Agregar
@@ -344,28 +529,81 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    IF NOT EXISTS (SELECT 1 FROM ServiciosEstablecimiento WHERE NombreServicio = @NombreServicio)
+    -- Verifica si el servicio ya existe
+    IF EXISTS (SELECT 1 FROM ServiciosEstablecimiento WHERE NombreServicio = @NombreServicio)
     BEGIN
-        INSERT INTO ServiciosEstablecimiento (NombreServicio)
-        VALUES (@NombreServicio);
-
-        SET @NuevoIdServicio = SCOPE_IDENTITY();
+        -- Si existe optenemos el id
+        SELECT @NuevoIdServicio = IdServicio FROM ServiciosEstablecimiento WHERE NombreServicio = @NombreServicio;
     END
     ELSE
     BEGIN
-        SET @NuevoIdServicio = -1; 
+        -- Si no existe registramos enl nuevo servicio
+        INSERT INTO ServiciosEstablecimiento (NombreServicio)
+        VALUES (@NombreServicio);
+
+        -- Se devuleve el id de recien agregado.
+        SET @NuevoIdServicio = SCOPE_IDENTITY();
     END
 END;
 
+
 -- Editar
+CREATE PROCEDURE sp_ActualizarServicioEstablecimiento
+    @IdServicio SMALLINT,
+    @NombreServicio VARCHAR(30),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM ServiciosEstablecimiento WHERE IdServicio = @IdServicio)
+    BEGIN
+        -- Verifica que no se repita el nombre antes de modificar 
+        IF NOT EXISTS (SELECT 1 FROM ServiciosEstablecimiento WHERE NombreServicio = @NombreServicio AND IdServicio <> @IdServicio)
+        BEGIN
+            UPDATE ServiciosEstablecimiento
+            SET NombreServicio = @NombreServicio
+            WHERE IdServicio = @IdServicio;
+
+            SET @Resultado = 1;  -- Exito
+        END
+        ELSE
+        BEGIN
+            SET @Resultado = -1;  --Ya existe otro servicio con ese nombre
+        END
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  --  Servicio no encontrado
+    END
+END;
 
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarServicioEstablecimiento
+    @IdServicio SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Verifica que el servicio no este en una asociacion
+    IF NOT EXISTS (SELECT 1 FROM ListaServiciosHospedaje WHERE IdServicio = @IdServicio)
+    BEGIN
+        DELETE FROM ServiciosEstablecimiento WHERE IdServicio = @IdServicio;
+        SET @Resultado = 1;  -- Exito
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  -- Servicio en uso en ListaServiciosHospedaje
+    END
+END;
 
 -- ========================== Para la tabla de ListaServiciosHospedaje:
 -- Agrgar un nuevo servicios a la lista de la empresa
 CREATE PROCEDURE sp_AgregarListaServiciosHospedaje
     @IdEmpresa VARCHAR(15),
-    @IdServicio SMALLINT
+    @IdServicio SMALLINT,
+    @Resultado SMALLINT OUTPUT  -- Se agrega para manejar el retorno
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -377,16 +615,67 @@ BEGIN
     BEGIN
         INSERT INTO ListaServiciosHospedaje (IdEmpresa, IdServicio)
         VALUES (@IdEmpresa, @IdServicio);
+
+        SET @Resultado = 1; 
     END
     ELSE
     BEGIN
-        PRINT 'Error: La empresa ya tiene asociado este servicio.';
+        SET @Resultado = -1;  -- Servicios ya asociado a la empresa
     END
 END;
 
+
 -- Editar
+CREATE PROCEDURE sp_ActualizarListaServiciosHospedaje
+    @IdEmpresa VARCHAR(15),
+    @IdServicio SMALLINT,
+    @NuevoIdServicio SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM ListaServiciosHospedaje WHERE IdEmpresa = @IdEmpresa AND IdServicio = @IdServicio)
+    BEGIN
+        -- Verifica que la empresa no tenga ya asignado el nuevo servicio antes de actualizar
+        IF NOT EXISTS (SELECT 1 FROM ListaServiciosHospedaje WHERE IdEmpresa = @IdEmpresa AND IdServicio = @NuevoIdServicio)
+        BEGIN
+            UPDATE ListaServiciosHospedaje
+            SET IdServicio = @NuevoIdServicio
+            WHERE IdEmpresa = @IdEmpresa AND IdServicio = @IdServicio;
+
+            SET @Resultado = 1;  
+        END
+        ELSE
+        BEGIN
+            SET @Resultado = -2;  -- ELa empresa ya tiene ese servicio
+        END
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  -- Relacion empresa-servicio no encontrada
+    END
+END;
 
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarListaServiciosHospedaje
+    @IdEmpresa VARCHAR(15),
+    @IdServicio SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM ListaServiciosHospedaje WHERE IdEmpresa = @IdEmpresa AND IdServicio = @IdServicio)
+    BEGIN
+        DELETE FROM ListaServiciosHospedaje WHERE IdEmpresa = @IdEmpresa AND IdServicio = @IdServicio;
+        SET @Resultado = 1;  -- Exito
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  -- Error: Relacion no encontrada
+    END
+END;
 
 -- ========================== Para la tabla de RedSocial:
 
@@ -398,23 +687,75 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    IF NOT EXISTS (SELECT 1 FROM RedesSociales WHERE Nombre = @Nombre)
+    -- Verifica si la red social ya existe
+    IF EXISTS (SELECT 1 FROM RedesSociales WHERE Nombre = @Nombre)
     BEGIN
-        INSERT INTO RedesSociales (Nombre)
-        VALUES (@Nombre);
-
-        SET @NuevoIdRedSocial = SCOPE_IDENTITY();
+        -- Obtiene el ID del registro existente
+        SELECT @NuevoIdRedSocial = IdRedSocial FROM RedesSociales WHERE Nombre = @Nombre;
     END
     ELSE
     BEGIN
-        SET @NuevoIdRedSocial = -1;  
+        -- Inserta la nueva red social
+        INSERT INTO RedesSociales (Nombre)
+        VALUES (@Nombre);
+
+        -- Obtiene el ID recién creado
+        SET @NuevoIdRedSocial = SCOPE_IDENTITY();
     END
 END;
 
 
+
 -- Editar
+CREATE PROCEDURE sp_ActualizarRedSocial
+    @IdRedSocial SMALLINT,
+    @Nombre VARCHAR(20),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM RedesSociales WHERE IdRedSocial = @IdRedSocial)
+    BEGIN
+        -- Validar que el nuevo nombre no este repetido
+        IF NOT EXISTS (SELECT 1 FROM RedesSociales WHERE Nombre = @Nombre AND IdRedSocial <> @IdRedSocial)
+        BEGIN
+            UPDATE RedesSociales
+            SET Nombre = @Nombre
+            WHERE IdRedSocial = @IdRedSocial;
+
+            SET @Resultado = 1;  -- Éxito
+        END
+        ELSE
+        BEGIN
+            SET @Resultado = -2;  --Ya existe otra red social con ese nombre
+        END
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  -- Red social no encontrada
+    END
+END;
 
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarRedSocial
+    @IdRedSocial SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Verifica que la red social no ester asociada
+    IF NOT EXISTS (SELECT 1 FROM ListaRedesSociales WHERE IdRedSocial = @IdRedSocial)
+    BEGIN
+        DELETE FROM RedesSociales WHERE IdRedSocial = @IdRedSocial;
+        SET @Resultado = 1;  
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  -- Error: La red social está en uso
+    END
+END;
 
 
 -- ========================== Para la tabla de ListaRedesSociales:
@@ -443,8 +784,48 @@ BEGIN
 END;
 
 -- Editar
+CREATE PROCEDURE sp_ActualizarListaRedesSociales
+    @IdEmpresa VARCHAR(15),
+    @IdRedSocial SMALLINT,
+    @NuevoEnlace VARCHAR(255),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM ListaRedesSociales WHERE IdEmpresa = @IdEmpresa AND IdRedSocial = @IdRedSocial)
+    BEGIN
+        UPDATE ListaRedesSociales
+        SET Enlace = @NuevoEnlace
+        WHERE IdEmpresa = @IdEmpresa AND IdRedSocial = @IdRedSocial;
+
+        SET @Resultado = 1;  
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1; 
+    END
+END;
 
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarListaRedesSociales
+    @IdEmpresa VARCHAR(15),
+    @IdRedSocial SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM ListaRedesSociales WHERE IdEmpresa = @IdEmpresa AND IdRedSocial = @IdRedSocial)
+    BEGIN
+        DELETE FROM ListaRedesSociales WHERE IdEmpresa = @IdEmpresa AND IdRedSocial = @IdRedSocial;
+        SET @Resultado = 1;  
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
 
 -- ========================== Para la tabla de TipoCama:
 
@@ -456,22 +837,72 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    IF NOT EXISTS (SELECT 1 FROM TipoCama WHERE NombreCama = @NombreCama)
+    IF EXISTS (SELECT 1 FROM TipoCama WHERE NombreCama = @NombreCama)
     BEGIN
+
+        SELECT @NuevoIdTipoCama = IdTipoCama FROM TipoCama WHERE NombreCama = @NombreCama;
+    END
+    ELSE
+    BEGIN
+        
         INSERT INTO TipoCama (NombreCama)
         VALUES (@NombreCama);
 
         SET @NuevoIdTipoCama = SCOPE_IDENTITY();
     END
+END;
+
+
+-- Editar
+CREATE PROCEDURE sp_ActualizarTipoCama
+    @IdTipoCama SMALLINT,
+    @NombreCama VARCHAR(20),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM TipoCama WHERE IdTipoCama = @IdTipoCama)
+    BEGIN
+        -- Validar que el nuevo nombre no este repetido
+        IF NOT EXISTS (SELECT 1 FROM TipoCama WHERE NombreCama = @NombreCama AND IdTipoCama <> @IdTipoCama)
+        BEGIN
+            UPDATE TipoCama
+            SET NombreCama = @NombreCama
+            WHERE IdTipoCama = @IdTipoCama;
+
+            SET @Resultado = 1;  
+        END
+        ELSE
+        BEGIN
+            SET @Resultado = -2;  
+        END
+    END
     ELSE
     BEGIN
-        SET @NuevoIdTipoCama = -1;  
+        SET @Resultado = -1;  
     END
 END;
 
--- Editar
-
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarTipoCama
+    @IdTipoCama SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Verifica que el tipo de cama no este en uso
+    IF NOT EXISTS (SELECT 1 FROM TipoHabitacion WHERE IdTipoCama = @IdTipoCama)
+    BEGIN
+        DELETE FROM TipoCama WHERE IdTipoCama = @IdTipoCama;
+        SET @Resultado = 1;  
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
 
 -- ========================== Para la tabla de TipoHabitacion:
 
@@ -486,22 +917,102 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    IF NOT EXISTS (SELECT 1 FROM TipoHabitacion WHERE Nombre = @Nombre)
-    BEGIN
-        INSERT INTO TipoHabitacion (Nombre, Descripcion, IdTipoCama, Precio)
-        VALUES (@Nombre, @Descripcion, @IdTipoCama, @Precio);
+    INSERT INTO TipoHabitacion (Nombre, Descripcion, IdTipoCama, Precio)
+    VALUES (@Nombre, @Descripcion, @IdTipoCama, @Precio);
 
-        SET @NuevoIdTipoHabitacion = SCOPE_IDENTITY();
+    SET @NuevoIdTipoHabitacion = SCOPE_IDENTITY();
+END;
+
+
+-- Editar
+CREATE PROCEDURE sp_ActualizarTipoHabitacion
+    @IdTipoHabitacion SMALLINT,
+    @Nombre VARCHAR(40),
+    @Descripcion VARCHAR(150),
+    @IdTipoCama SMALLINT,
+    @Precio FLOAT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Solo se valida que el ID de la habitación exista antes de actualizar
+    IF EXISTS (SELECT 1 FROM TipoHabitacion WHERE IdTipoHabitacion = @IdTipoHabitacion)
+    BEGIN
+        UPDATE TipoHabitacion
+        SET Nombre = @Nombre,
+            Descripcion = @Descripcion,
+            IdTipoCama = @IdTipoCama,
+            Precio = @Precio
+        WHERE IdTipoHabitacion = @IdTipoHabitacion;
+
+        SET @Resultado = 1;  
     END
     ELSE
     BEGIN
-        SET @NuevoIdTipoHabitacion = -1;  
+        SET @Resultado = -1;  
     END
 END;
 
--- Editar
 
--- Eliminar:
+-- CREATE PROCEDURE sp_ActualizarTipoHabitacion
+--     @IdTipoHabitacion SMALLINT,
+--     @Nombre VARCHAR(40),
+--     @Descripcion VARCHAR(150),
+--     @IdTipoCama SMALLINT,
+--     @Precio FLOAT,
+--     @Resultado SMALLINT OUTPUT
+-- AS
+-- BEGIN
+--     SET NOCOUNT ON;
+
+--     IF EXISTS (SELECT 1 FROM TipoHabitacion WHERE IdTipoHabitacion = @IdTipoHabitacion)
+--     BEGIN
+--         -- Validar que el nuevo nombre no este repetido
+--         IF NOT EXISTS (SELECT 1 FROM TipoHabitacion WHERE Nombre = @Nombre AND IdTipoHabitacion <> @IdTipoHabitacion)
+--         BEGIN
+--             UPDATE TipoHabitacion
+--             SET Nombre = @Nombre,
+--                 Descripcion = @Descripcion,
+--                 IdTipoCama = @IdTipoCama,
+--                 Precio = @Precio
+--             WHERE IdTipoHabitacion = @IdTipoHabitacion;
+
+--             SET @Resultado = 1;  
+--         END
+--         ELSE
+--         BEGIN
+--             SET @Resultado = -2;  
+--         END
+--     END
+--     ELSE
+--     BEGIN
+--         SET @Resultado = -1;  
+--     END
+-- END;
+
+-- Eliminar: (Aparte de que no este en datoshabitacion, se debe de validar que solo la empresa a la que le pertenece, pueda eliminarla.)
+CREATE PROCEDURE sp_EliminarTipoHabitacion
+    @IdTipoHabitacion SMALLINT,
+    @IdEmpresa VARCHAR(15), 
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Verifica que el tipo de habitacion no este en y que la empresa dueña sea la que lo elimina
+    IF NOT EXISTS (SELECT 1 FROM DatosHabitacion WHERE IdTipoHabitacion = @IdTipoHabitacion)
+    AND EXISTS (SELECT 1 FROM TipoHabitacionEmpresa WHERE IdTipoHabitacion = @IdTipoHabitacion AND IdEmpresa = @IdEmpresa)
+    BEGIN
+        DELETE FROM TipoHabitacion WHERE IdTipoHabitacion = @IdTipoHabitacion;
+        SET @Resultado = 1;  
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
+
 
 -- ========================== Para la tabla de Imagen:
 
@@ -520,9 +1031,48 @@ BEGIN
     SET @NuevoIdImagen = SCOPE_IDENTITY();
 END;
 
--- Editar
+-- Editar (Para este, no se deberia de usar, lo mejor seria eliminar la imagen y registrar una nueva, en la ventana, solo se mostran las opciones de agregar o eliminar la imagen)
+CREATE PROCEDURE sp_ActualizarFoto
+    @IdImagen SMALLINT,
+    @Imagen VARBINARY(MAX),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM Fotos WHERE IdImagen = @IdImagen)
+    BEGIN
+        UPDATE Fotos
+        SET Imagen = @Imagen
+        WHERE IdImagen = @IdImagen;
+
+        SET @Resultado = 1;  
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
 
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarFoto
+    @IdImagen SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM Fotos WHERE IdImagen = @IdImagen)
+    BEGIN
+        DELETE FROM Fotos WHERE IdImagen = @IdImagen;
+        SET @Resultado = 1; 
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
+
 
 -- ========================== Para la tabla de DatosHabitacion:
 
@@ -550,8 +1100,59 @@ BEGIN
 END;
 
 -- Editar
+CREATE PROCEDURE sp_ActualizarDatosHabitacion
+    @IdDatosHabitacion SMALLINT,
+    @Numero TINYINT,
+    @IdTipoHabitacion SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM DatosHabitacion WHERE IdDatosHabitacion = @IdDatosHabitacion)
+    BEGIN
+        -- Validar que el numero de habitacion no este repetido en la misma empresa
+        IF NOT EXISTS (SELECT 1 FROM DatosHabitacion WHERE IdTipoHabitacion = @IdTipoHabitacion AND Numero = @Numero AND IdDatosHabitacion <> @IdDatosHabitacion)
+        BEGIN
+            UPDATE DatosHabitacion
+            SET Numero = @Numero,
+                IdTipoHabitacion = @IdTipoHabitacion
+            WHERE IdDatosHabitacion = @IdDatosHabitacion;
+
+            SET @Resultado = 1; 
+        END
+        ELSE
+        BEGIN
+            SET @Resultado = -2;  
+        END
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
 
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarDatosHabitacion
+    @IdDatosHabitacion SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Verifica que la habitación no tenga reservas activas (fecha de salida > hoy)
+    IF NOT EXISTS (
+        SELECT 1 FROM Reservacion WHERE IdHabitacion = @IdDatosHabitacion AND FechaHoraSalida > GETDATE()
+    )
+    BEGIN
+        DELETE FROM DatosHabitacion WHERE IdDatosHabitacion = @IdDatosHabitacion;
+        SET @Resultado = 1;  -- Éxito
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  -- Error: Habitación aún tiene reservas activas
+    END
+END;
 
 -- ========================== Para la tabla de HabitacionesEmpresa:
 
@@ -578,8 +1179,134 @@ BEGIN
 END;
 
 -- Editar
+CREATE PROCEDURE sp_ActualizarHabitacionesEmpresa
+    @IdEmpresa VARCHAR(15),
+    @IdHabitacion SMALLINT,
+    @NuevoIdHabitacion SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM HabitacionesEmpresa WHERE IdEmpresa = @IdEmpresa AND IdHabitacion = @IdHabitacion)
+    BEGIN
+        -- Verifica que la empresa no tenga ya asignada la nueva habitacion antes de actualizar
+        IF NOT EXISTS (SELECT 1 FROM HabitacionesEmpresa WHERE IdEmpresa = @IdEmpresa AND IdHabitacion = @NuevoIdHabitacion)
+        BEGIN
+            UPDATE HabitacionesEmpresa
+            SET IdHabitacion = @NuevoIdHabitacion
+            WHERE IdEmpresa = @IdEmpresa AND IdHabitacion = @IdHabitacion;
+
+            SET @Resultado = 1;  
+        END
+        ELSE
+        BEGIN
+            SET @Resultado = -2; 
+        END
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
 
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarHabitacionesEmpresa
+    @IdEmpresa VARCHAR(15),
+    @IdHabitacion SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Verifica que la habitación ya no exista en el sistema
+    IF NOT EXISTS (SELECT 1 FROM DatosHabitacion WHERE IdDatosHabitacion = @IdHabitacion)
+    BEGIN
+        DELETE FROM HabitacionesEmpresa WHERE IdEmpresa = @IdEmpresa AND IdHabitacion = @IdHabitacion;
+        SET @Resultado = 1; 
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
+
+-- ========================== Para la tabla de TipoHabitacionesEmpresa:
+
+-- Agregar la asociacion entre las tiposhabitacion y la empresa.
+CREATE PROCEDURE sp_AgregarTipoHabitacionEmpresa
+    @IdTipoHabitacion SMALLINT,
+    @IdEmpresa VARCHAR(15),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM TipoHabitacionEmpresa WHERE IdTipoHabitacion = @IdTipoHabitacion AND IdEmpresa = @IdEmpresa
+    )
+    BEGIN
+        INSERT INTO TipoHabitacionEmpresa (IdTipoHabitacion, IdEmpresa)
+        VALUES (@IdTipoHabitacion, @IdEmpresa);
+
+        SET @Resultado = 1; 
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
+
+-- Editar
+CREATE PROCEDURE sp_ActualizarTipoHabitacionEmpresa
+    @IdTipoHabitacion SMALLINT,
+    @IdEmpresa VARCHAR(15),
+    @NuevoIdTipoHabitacion SMALLINT,
+    @NuevoIdEmpresa VARCHAR(15),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    
+    IF EXISTS (
+        SELECT 1 FROM TipoHabitacionEmpresa WHERE IdTipoHabitacion = @IdTipoHabitacion AND IdEmpresa = @IdEmpresa
+    )
+    BEGIN
+        UPDATE TipoHabitacionEmpresa
+        SET IdTipoHabitacion = @NuevoIdTipoHabitacion,
+            IdEmpresa = @NuevoIdEmpresa
+        WHERE IdTipoHabitacion = @IdTipoHabitacion AND IdEmpresa = @IdEmpresa;
+
+        SET @Resultado = 1;  
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
+
+
+-- Eliminar:
+CREATE PROCEDURE sp_EliminarTipoHabitacionEmpresa
+    @IdTipoHabitacion SMALLINT,
+    @IdEmpresa VARCHAR(15),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    IF NOT EXISTS (SELECT 1 FROM DatosHabitacion WHERE IdTipoHabitacion = @IdTipoHabitacion)
+    BEGIN
+        DELETE FROM TipoHabitacionEmpresa WHERE IdTipoHabitacion = @IdTipoHabitacion AND IdEmpresa = @IdEmpresa;
+        SET @Resultado = 1;  
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
+
 
 -- ========================== Para la tabla de Comodidad:
 
@@ -591,22 +1318,69 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    IF NOT EXISTS (SELECT 1 FROM Comodidad WHERE Nombre = @Nombre)
+    SELECT @NuevoIdComodidad = IdComodidad FROM Comodidad WHERE Nombre = @Nombre;
+
+
+    IF @NuevoIdComodidad IS NULL
     BEGIN
         INSERT INTO Comodidad (Nombre)
         VALUES (@Nombre);
 
         SET @NuevoIdComodidad = SCOPE_IDENTITY();
     END
+END;
+
+
+-- Editar
+CREATE PROCEDURE sp_ActualizarComodidad
+    @IdComodidad SMALLINT,
+    @Nombre VARCHAR(20),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM Comodidad WHERE IdComodidad = @IdComodidad)
+    BEGIN
+        -- Validar que el nuevo nombre no este repetido
+        IF NOT EXISTS (SELECT 1 FROM Comodidad WHERE Nombre = @Nombre AND IdComodidad <> @IdComodidad)
+        BEGIN
+            UPDATE Comodidad
+            SET Nombre = @Nombre
+            WHERE IdComodidad = @IdComodidad;
+
+            SET @Resultado = 1; 
+        END
+        ELSE
+        BEGIN
+            SET @Resultado = -2;  
+        END
+    END
     ELSE
     BEGIN
-        SET @NuevoIdComodidad = -1;  
+        SET @Resultado = -1;  
     END
 END;
 
--- Editar
-
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarComodidad
+    @IdComodidad SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    --
+    IF NOT EXISTS (SELECT 1 FROM ListaComodidades WHERE IdComodidad = @IdComodidad)
+    BEGIN
+        DELETE FROM Comodidad WHERE IdComodidad = @IdComodidad;
+        SET @Resultado = 1;  
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
 
 -- ========================== Para la tabla de ListaComodidades:
 
@@ -633,8 +1407,55 @@ BEGIN
 END;
 
 -- Editar
+CREATE PROCEDURE sp_ActualizarListaComodidades
+    @IdTipoHabitacion SMALLINT,
+    @IdComodidad SMALLINT,
+    @NuevoIdComodidad SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM ListaComodidades WHERE IdTipoHabitacion = @IdTipoHabitacion AND IdComodidad = @IdComodidad)
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM ListaComodidades WHERE IdTipoHabitacion = @IdTipoHabitacion AND IdComodidad = @NuevoIdComodidad)
+        BEGIN
+            UPDATE ListaComodidades
+            SET IdComodidad = @NuevoIdComodidad
+            WHERE IdTipoHabitacion = @IdTipoHabitacion AND IdComodidad = @IdComodidad;
+
+            SET @Resultado = 1;  
+        END
+        ELSE
+        BEGIN
+            SET @Resultado = -2; 
+        END
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
 
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarListaComodidades
+    @IdTipoHabitacion SMALLINT,
+    @IdComodidad SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM ListaComodidades WHERE IdTipoHabitacion = @IdTipoHabitacion AND IdComodidad = @IdComodidad)
+    BEGIN
+        DELETE FROM ListaComodidades WHERE IdTipoHabitacion = @IdTipoHabitacion AND IdComodidad = @IdComodidad;
+        SET @Resultado = 1;  
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1; 
+    END
+END;
 
 -- ========================== Para la tabla de Cliente:
 
@@ -665,8 +1486,56 @@ BEGIN
 END;
 
 -- Editar
+CREATE PROCEDURE sp_ActualizarCliente
+    @Cedula VARCHAR(15),
+    @NombreCompleto VARCHAR(50),
+    @TipoIdentificacion VARCHAR(20),
+    @PaisResidencia VARCHAR(50),
+    @FechaNacimiento DATE,
+    @IdDireccion SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM Cliente WHERE Cedula = @Cedula)
+    BEGIN
+        UPDATE Cliente
+        SET NombreCompleto = @NombreCompleto,
+            TipoIdentificacion = @TipoIdentificacion,
+            PaisResidencia = @PaisResidencia,
+            FechaNacimiento = @FechaNacimiento,
+            IdDireccion = @IdDireccion
+        WHERE Cedula = @Cedula;
+
+        SET @Resultado = 1;  
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1; 
+    END
+END;
+
 
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarCliente
+    @Cedula VARCHAR(15),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Verifica que el cliente no tenga reservas activas
+    IF NOT EXISTS (SELECT 1 FROM Reservacion WHERE IdCliente = @Cedula AND FechaHoraSalida > GETDATE())
+    BEGIN
+        DELETE FROM Cliente WHERE Cedula = @Cedula;
+        SET @Resultado = 1; 
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
 
 -- ========================== Para la tabla de Telefono:
 
@@ -680,7 +1549,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Verifica que el cliente no tenga más de 3 números registrados
+    -- Verifica que el cliente no tenga mas de 3 números registrados
     IF (SELECT COUNT(*) FROM Telefono WHERE IdUsuario = @IdUsuario) < 3
     BEGIN
         INSERT INTO Telefono (IdUsuario, CodigoPais, NumeroTelefonico)
@@ -694,14 +1563,65 @@ BEGIN
     END
 END;
 
--- Editar
+-- Editar ()
+CREATE PROCEDURE sp_ActualizarTelefono
+    @IdTelefono SMALLINT,
+    @CodigoPais VARCHAR(5),
+    @NumeroTelefonico VARCHAR(20),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM Telefono WHERE IdTelefono = @IdTelefono)
+    BEGIN
+
+        IF NOT EXISTS (SELECT 1 FROM Telefono WHERE NumeroTelefonico = @NumeroTelefonico AND IdTelefono <> @IdTelefono)
+        BEGIN
+            UPDATE Telefono
+            SET CodigoPais = @CodigoPais,
+                NumeroTelefonico = @NumeroTelefonico
+            WHERE IdTelefono = @IdTelefono;
+
+            SET @Resultado = 1; 
+        END
+        ELSE
+        BEGIN
+            SET @Resultado = -2;  
+        END
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
 
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarTelefono
+    @IdTelefono SMALLINT,
+    @IdUsuario VARCHAR(15),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Verifica que el teléfono pertenece al usuario y que al menos quede uno registrado
+    IF EXISTS (SELECT 1 FROM Telefono WHERE IdTelefono = @IdTelefono AND IdUsuario = @IdUsuario)
+    AND (SELECT COUNT(*) FROM Telefono WHERE IdUsuario = @IdUsuario) > 1
+    BEGIN
+        DELETE FROM Telefono WHERE IdTelefono = @IdTelefono;
+        SET @Resultado = 1;  -
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
 
 -- ========================== Para la tabla de Reservacion:
 
--- Agregar
-CREATE PROCEDURE sp_AgregarReservacion -- Este deveria de verificar que en el rango de fechas indicado no se haya reservado anteriormente esa habitacion.
+-- Agregar (Este deveria de verificar que en el rango de fechas indicado no se haya reservado anteriormente esa habitacion.)
+CREATE PROCEDURE sp_AgregarReservacion
     @IdCliente VARCHAR(15),
     @IdHabitacion SMALLINT,
     @FechaHoraIngreso DATETIME,
@@ -713,23 +1633,120 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Verifica que la fecha de salida sea mayor a la fecha de ingreso
+    -- revisar que la fecha de salida sea mayor a la de ingreso
     IF @FechaHoraSalida > @FechaHoraIngreso
     BEGIN
-        INSERT INTO Reservacion (IdCliente, IdHabitacion, FechaHoraIngreso, FechaHoraSalida, CantidadPersonas, Vehiculo)
-        VALUES (@IdCliente, @IdHabitacion, @FechaHoraIngreso, @FechaHoraSalida, @CantidadPersonas, @Vehiculo);
+        -- Revisar si el rango de fechas ingresado no cheque con alguna otra reserva.
+        IF NOT EXISTS (
+            SELECT 1 FROM Reservacion
+            WHERE IdHabitacion = @IdHabitacion
+            AND (
+                (@FechaHoraIngreso BETWEEN FechaHoraIngreso AND FechaHoraSalida) OR
+                (@FechaHoraSalida BETWEEN FechaHoraIngreso AND FechaHoraSalida) OR
+                (FechaHoraIngreso BETWEEN @FechaHoraIngreso AND @FechaHoraSalida) OR
+                (FechaHoraSalida BETWEEN @FechaHoraIngreso AND @FechaHoraSalida)
+            )
+        )
+        BEGIN
+            -- Registrar la reservacion
+            INSERT INTO Reservacion (IdCliente, IdHabitacion, FechaHoraIngreso, FechaHoraSalida, CantidadPersonas, Vehiculo)
+            VALUES (@IdCliente, @IdHabitacion, @FechaHoraIngreso, @FechaHoraSalida, @CantidadPersonas, @Vehiculo);
 
-        SET @NuevoIdReservacion = SCOPE_IDENTITY();
+            SET @NuevoIdReservacion = SCOPE_IDENTITY();
+        END
+        ELSE
+        BEGIN
+            SET @NuevoIdReservacion = -2;  --  La habitacon ya esta reservada en este rango de fechas
+        END
     END
     ELSE
     BEGIN
-        SET @NuevoIdReservacion = -1;  
+        SET @NuevoIdReservacion = -1; -- Fecha de salida menor a la de entrada.
     END
 END;
 
+
 -- Editar
+CREATE PROCEDURE sp_ActualizarReservacion
+    @IdReservacion SMALLINT,
+    @IdCliente VARCHAR(15),
+    @IdHabitacion SMALLINT,
+    @FechaHoraIngreso DATETIME,
+    @FechaHoraSalida DATETIME,
+    @CantidadPersonas TINYINT,
+    @Vehiculo VARCHAR(2),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM Reservacion WHERE IdReservacion = @IdReservacion)
+    BEGIN
+        -- Validar que la fecha de salida sea mayor a la fecha de ingreso
+        IF @FechaHoraSalida > @FechaHoraIngreso
+        BEGIN
+            -- Verificar si existe una reservación que choque en el rango de fechas, sin incluir el registro actual
+            IF NOT EXISTS (
+                SELECT 1 FROM Reservacion
+                WHERE IdHabitacion = @IdHabitacion
+                AND IdReservacion <> @IdReservacion
+                AND (
+                    (@FechaHoraIngreso BETWEEN FechaHoraIngreso AND FechaHoraSalida) OR
+                    (@FechaHoraSalida BETWEEN FechaHoraIngreso AND FechaHoraSalida) OR
+                    (FechaHoraIngreso BETWEEN @FechaHoraIngreso AND @FechaHoraSalida) OR
+                    (FechaHoraSalida BETWEEN @FechaHoraIngreso AND @FechaHoraSalida)
+                )
+            )
+            BEGIN
+                UPDATE Reservacion
+                SET IdCliente = @IdCliente,
+                    IdHabitacion = @IdHabitacion,
+                    FechaHoraIngreso = @FechaHoraIngreso,
+                    FechaHoraSalida = @FechaHoraSalida,
+                    CantidadPersonas = @CantidadPersonas,
+                    Vehiculo = @Vehiculo
+                WHERE IdReservacion = @IdReservacion;
+
+                SET @Resultado = 1;  
+            END
+            ELSE
+            BEGIN
+                SET @Resultado = -3;  -- La habitación ya esta reservada en este rango de fechas
+            END
+        END
+        ELSE
+        BEGIN
+            SET @Resultado = -2; -- Fecha de salida menor a la de ingreso
+        END
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
+
 
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarReservacion
+    @IdReservacion SMALLINT,
+    @IdCliente VARCHAR(15),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Verifica que la reservación no esté facturada y que el cliente sea el dueño
+    IF NOT EXISTS (SELECT 1 FROM Facturacion WHERE IdReservacion = @IdReservacion)
+    AND EXISTS (SELECT 1 FROM Reservacion WHERE IdReservacion = @IdReservacion AND IdCliente = @IdCliente)
+    BEGIN
+        DELETE FROM Reservacion WHERE IdReservacion = @IdReservacion;
+        SET @Resultado = 1;  -- Éxito
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  -- Error: Reservación facturada o cliente incorrecto
+    END
+END;
 
 -- ========================== Para la tabla de Facturacion:
 
@@ -756,8 +1773,53 @@ BEGIN
 END;
 
 -- Editar
+CREATE PROCEDURE sp_ActualizarFacturacion
+    @IdFacturacion SMALLINT,
+    @MetodoPago VARCHAR(10),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM Facturacion WHERE IdFacturacion = @IdFacturacion)
+    BEGIN
+        UPDATE Facturacion
+        SET MetodoPago = @MetodoPago
+        WHERE IdFacturacion = @IdFacturacion;
+
+        SET @Resultado = 1;  
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
 
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarFacturacion
+    @IdFacturacion SMALLINT,
+    @IdEmpresa VARCHAR(15),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Verifica que la empresa sea la dueña de la habitación facturada
+    IF EXISTS (
+        SELECT 1 FROM Facturacion F
+        JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+        JOIN HabitacionesEmpresa H ON R.IdHabitacion = H.IdHabitacion
+        WHERE F.IdFacturacion = @IdFacturacion AND H.IdEmpresa = @IdEmpresa
+    )
+    BEGIN
+        DELETE FROM Facturacion WHERE IdFacturacion = @IdFacturacion;
+        SET @Resultado = 1;  
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1; 
+    END
+END;
 
 -- ========================== Para la tabla de EmpresaRecreacion:
 
@@ -779,17 +1841,72 @@ BEGIN
         INSERT INTO EmpresaRecreacion (CedulaJuridica, NombreEmpresa, CorreoElectronico, PersonaAContactar, IdDireccion, Telefono)
         VALUES (@CedulaJuridica, @NombreEmpresa, @CorreoElectronico, @PersonaAContactar, @IdDireccion, @Telefono);
 
-        SET @Resultado = 1;  -- Éxito
+        SET @Resultado = 1;  
     END
     ELSE
     BEGIN
-        SET @Resultado = -1;  -- Error: Ya existe la empresa
+        SET @Resultado = -1;  
     END
 END;
 
 -- Editar
+CREATE PROCEDURE sp_ActualizarEmpresaRecreacion
+    @CedulaJuridica VARCHAR(15),
+    @NombreEmpresa VARCHAR(50),
+    @CorreoElectronico VARCHAR(50),
+    @PersonaAContactar VARCHAR(30),
+    @IdDireccion SMALLINT,
+    @Telefono VARCHAR(15),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM EmpresaRecreacion WHERE CedulaJuridica = @CedulaJuridica)
+    BEGIN
+        
+        IF NOT EXISTS (SELECT 1 FROM EmpresaRecreacion WHERE CorreoElectronico = @CorreoElectronico AND CedulaJuridica <> @CedulaJuridica)
+        AND NOT EXISTS (SELECT 1 FROM EmpresaRecreacion WHERE Telefono = @Telefono AND CedulaJuridica <> @CedulaJuridica)
+        BEGIN
+            UPDATE EmpresaRecreacion
+            SET NombreEmpresa = @NombreEmpresa,
+                CorreoElectronico = @CorreoElectronico,
+                PersonaAContactar = @PersonaAContactar,
+                IdDireccion = @IdDireccion,
+                Telefono = @Telefono
+            WHERE CedulaJuridica = @CedulaJuridica;
+
+            SET @Resultado = 1;  
+        END
+        ELSE
+        BEGIN
+            SET @Resultado = -2;  
+        END
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
 
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarEmpresaRecreacion
+    @CedulaJuridica VARCHAR(15),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM EmpresaRecreacion WHERE CedulaJuridica = @CedulaJuridica)
+    BEGIN
+        DELETE FROM EmpresaRecreacion WHERE CedulaJuridica = @CedulaJuridica;
+        SET @Resultado = 1;  -- Éxito
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  -- Error: Empresa no encontrada
+    END
+END;
 
 -- ========================== Para la tabla de ServiciosRecreacion:
 
@@ -803,27 +1920,78 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    IF NOT EXISTS (SELECT 1 FROM ServiciosRecreacion WHERE IdEmpresa = @IdEmpresa AND NombreServicio = @NombreServicio)
+    SELECT @NuevoIdServicio = IdServicio FROM ServiciosRecreacion 
+    WHERE IdEmpresa = @IdEmpresa AND NombreServicio = @NombreServicio;
+
+    IF @NuevoIdServicio IS NULL
     BEGIN
         INSERT INTO ServiciosRecreacion (IdEmpresa, NombreServicio, Precio)
         VALUES (@IdEmpresa, @NombreServicio, @Precio);
 
         SET @NuevoIdServicio = SCOPE_IDENTITY();
     END
+END;
+
+
+-- Editar
+CREATE PROCEDURE sp_ActualizarServiciosRecreacion
+    @IdServicio SMALLINT,
+    @NombreServicio VARCHAR(30),
+    @Precio FLOAT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM ServiciosRecreacion WHERE IdServicio = @IdServicio)
+    BEGIN
+       
+        IF NOT EXISTS (SELECT 1 FROM ServiciosRecreacion WHERE NombreServicio = @NombreServicio AND IdServicio <> @IdServicio)
+        BEGIN
+            UPDATE ServiciosRecreacion
+            SET NombreServicio = @NombreServicio,
+                Precio = @Precio
+            WHERE IdServicio = @IdServicio;
+
+            SET @Resultado = 1;  
+        END
+        ELSE
+        BEGIN
+            SET @Resultado = -2;  
+        END
+    END
     ELSE
     BEGIN
-        SET @NuevoIdServicio = -1;  
+        SET @Resultado = -1;  
     END
 END;
 
--- Editar
-
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarServiciosRecreacion
+    @IdServicio SMALLINT,
+    @IdEmpresa VARCHAR(15),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    
+    IF EXISTS (SELECT 1 FROM ServiciosRecreacion WHERE IdServicio = @IdServicio AND IdEmpresa = @IdEmpresa)
+    BEGIN
+        DELETE FROM ServiciosRecreacion WHERE IdServicio = @IdServicio;
+        SET @Resultado = 1; 
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  -- 
+    END
+END;
 
 -- ========================== Para la tabla de Actividad:
 
 -- Agregar 
 CREATE PROCEDURE sp_AgregarActividad
+    @IdEmpresa VARCHAR(15),
     @NombreActividad VARCHAR(30),
     @DescripcionActividad VARCHAR(100),
     @NuevoIdActividad SMALLINT OUTPUT
@@ -831,22 +1999,75 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    IF NOT EXISTS (SELECT 1 FROM Actividad WHERE NombreActividad = @NombreActividad)
+    SELECT @NuevoIdActividad = IdActividad FROM Actividad 
+    WHERE IdEmpresa = @IdEmpresa AND NombreActividad = @NombreActividad;
+
+    IF @NuevoIdActividad IS NULL
     BEGIN
-        INSERT INTO Actividad (NombreActividad, DescripcionActividad)
-        VALUES (@NombreActividad, @DescripcionActividad);
+        INSERT INTO Actividad (IdEmpresa, NombreActividad, DescripcionActividad)
+        VALUES (@IdEmpresa, @NombreActividad, @DescripcionActividad);
 
         SET @NuevoIdActividad = SCOPE_IDENTITY();
     END
+END;
+
+
+-- Editar (Deberia de guardar el id de la empresa que lo crea)
+CREATE PROCEDURE sp_ActualizarActividad
+    @IdActividad SMALLINT,
+    @IdEmpresa VARCHAR(15),
+    @NombreActividad VARCHAR(30),
+    @DescripcionActividad VARCHAR(100),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM Actividad WHERE IdActividad = @IdActividad AND IdEmpresa = @IdEmpresa)
+    BEGIN
+       
+        IF NOT EXISTS (SELECT 1 FROM Actividad WHERE IdEmpresa = @IdEmpresa AND NombreActividad = @NombreActividad AND IdActividad <> @IdActividad)
+        BEGIN
+            UPDATE Actividad
+            SET NombreActividad = @NombreActividad,
+                DescripcionActividad = @DescripcionActividad
+            WHERE IdActividad = @IdActividad;
+
+            SET @Resultado = 1; 
+        END
+        ELSE
+        BEGIN
+            SET @Resultado = -2; 
+        END
+    END
     ELSE
     BEGIN
-        SET @NuevoIdActividad = -1;  -- Deveria de devolver el id de la actividad de una vez de ser posible
+        SET @Resultado = -1; 
     END
 END;
 
--- Editar
 
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarActividad
+    @IdActividad SMALLINT,
+    @IdEmpresa VARCHAR(15),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF NOT EXISTS (SELECT 1 FROM ListaActividades WHERE IdActividad = @IdActividad)
+    AND EXISTS (SELECT 1 FROM Actividad WHERE IdActividad = @IdActividad AND IdEmpresa = @IdEmpresa)
+    BEGIN
+        DELETE FROM Actividad WHERE IdActividad = @IdActividad;
+        SET @Resultado = 1; 
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1; 
+    END
+END;
+
 
 -- ========================== Para la tabla de ListaActividades:
 
@@ -873,8 +2094,61 @@ BEGIN
 END;
 
 -- Editar
+CREATE PROCEDURE sp_ActualizarListaActividades
+    @IdServicio SMALLINT,
+    @IdActividad SMALLINT,
+    @NuevoIdActividad SMALLINT,
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (SELECT 1 FROM ListaActividades WHERE IdServicio = @IdServicio AND IdActividad = @IdActividad)
+    BEGIN
+   
+        IF NOT EXISTS (SELECT 1 FROM ListaActividades WHERE IdServicio = @IdServicio AND IdActividad = @NuevoIdActividad)
+        BEGIN
+            UPDATE ListaActividades
+            SET IdActividad = @NuevoIdActividad
+            WHERE IdServicio = @IdServicio AND IdActividad = @IdActividad;
+
+            SET @Resultado = 1;  
+        END
+        ELSE
+        BEGIN
+            SET @Resultado = -2; 
+        END
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
 
 -- Eliminar:
+CREATE PROCEDURE sp_EliminarListaActividades
+    @IdServicio SMALLINT,
+    @IdActividad SMALLINT,
+    @IdEmpresa VARCHAR(15),
+    @Resultado SMALLINT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF EXISTS (
+        SELECT 1 FROM ListaActividades L
+        JOIN ServiciosRecreacion S ON L.IdServicio = S.IdServicio
+        WHERE L.IdServicio = @IdServicio AND L.IdActividad = @IdActividad AND S.IdEmpresa = @IdEmpresa
+    )
+    BEGIN
+        DELETE FROM ListaActividades WHERE IdServicio = @IdServicio AND IdActividad = @IdActividad;
+        SET @Resultado = 1;  
+    END
+    ELSE
+    BEGIN
+        SET @Resultado = -1;  
+    END
+END;
 
 -- ========================== Para la tabla de :
 
