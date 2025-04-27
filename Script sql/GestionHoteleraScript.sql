@@ -2312,3 +2312,224 @@ BEGIN
         )
     ));
 END;
+
+
+-- >>> +++++++++++++++++++++ Empresas +++++++++++++++++++++++++++++++++++
+-- >>Facturacion:
+-- >Por tipo habitacion:
+-- Dia:
+CREATE PROCEDURE sp_FacturacionPorDiaTipoHabitacion
+    @IdEmpresa VARCHAR(15),
+    @IdTipoHabitacion SMALLINT,
+    @FechaDia DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT F.IdFacturacion, F.FechaFacturacion, F.MontoTotal, F.MetodoPago,
+           R.IdReservacion, R.FechaHoraIngreso, R.FechaHoraSalida, R.CantidadPersonas,
+           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, C.NombreCompleto AS Cliente
+    FROM Facturacion F
+    JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+    JOIN DatosHabitacion H ON R.IdHabitacion = H.IdDatosHabitacion
+    JOIN TipoHabitacion TH ON H.IdTipoHabitacion = TH.IdTipoHabitacion
+    JOIN Cliente C ON R.IdCliente = C.Cedula
+    JOIN HabitacionesEmpresa HE ON H.IdDatosHabitacion = HE.IdHabitacion
+    WHERE HE.IdEmpresa = @IdEmpresa
+    AND TH.IdTipoHabitacion = @IdTipoHabitacion
+    AND CAST(F.FechaFacturacion AS DATE) = @FechaDia;
+END;
+
+-- Mes:
+CREATE PROCEDURE sp_FacturacionPorMesTipoHabitacion
+    @IdEmpresa VARCHAR(15),
+    @IdTipoHabitacion SMALLINT,
+    @Mes TINYINT,
+    @Anio SMALLINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT F.IdFacturacion, F.FechaFacturacion, F.MontoTotal, F.MetodoPago,
+           R.IdReservacion, R.FechaHoraIngreso, R.FechaHoraSalida, R.CantidadPersonas,
+           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, C.NombreCompleto AS Cliente
+    FROM Facturacion F
+    JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+    JOIN DatosHabitacion H ON R.IdHabitacion = H.IdDatosHabitacion
+    JOIN TipoHabitacion TH ON H.IdTipoHabitacion = TH.IdTipoHabitacion
+    JOIN Cliente C ON R.IdCliente = C.Cedula
+    JOIN HabitacionesEmpresa HE ON H.IdDatosHabitacion = HE.IdHabitacion
+    WHERE HE.IdEmpresa = @IdEmpresa
+    AND TH.IdTipoHabitacion = @IdTipoHabitacion
+    AND MONTH(F.FechaFacturacion) = @Mes
+    AND YEAR(F.FechaFacturacion) = @Anio;
+END;
+
+-- Anio:
+CREATE PROCEDURE sp_FacturacionPorAnioTipoHabitacion
+    @IdEmpresa VARCHAR(15),
+    @IdTipoHabitacion SMALLINT,
+    @Anio SMALLINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT F.IdFacturacion, F.FechaFacturacion, F.MontoTotal, F.MetodoPago,
+           R.IdReservacion, R.FechaHoraIngreso, R.FechaHoraSalida, R.CantidadPersonas,
+           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, C.NombreCompleto AS Cliente
+    FROM Facturacion F
+    JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+    JOIN DatosHabitacion H ON R.IdHabitacion = H.IdDatosHabitacion
+    JOIN TipoHabitacion TH ON H.IdTipoHabitacion = TH.IdTipoHabitacion
+    JOIN Cliente C ON R.IdCliente = C.Cedula
+    JOIN HabitacionesEmpresa HE ON H.IdDatosHabitacion = HE.IdHabitacion
+    WHERE HE.IdEmpresa = @IdEmpresa
+    AND TH.IdTipoHabitacion = @IdTipoHabitacion
+    AND YEAR(F.FechaFacturacion) = @Anio;
+END;
+
+-- Rango de fechas:
+CREATE PROCEDURE sp_FacturacionPorRangoFechas_TipoHabitacion
+    @IdEmpresa VARCHAR(15),
+    @IdTipoHabitacion SMALLINT,
+    @FechaInicio DATE,
+    @FechaFin DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT F.IdFacturacion, F.FechaFacturacion, F.MontoTotal, F.MetodoPago,
+           R.IdReservacion, R.FechaHoraIngreso, R.FechaHoraSalida, R.CantidadPersonas,
+           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, C.NombreCompleto AS Cliente
+    FROM Facturacion F
+    JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+    JOIN DatosHabitacion H ON R.IdHabitacion = H.IdDatosHabitacion
+    JOIN TipoHabitacion TH ON H.IdTipoHabitacion = TH.IdTipoHabitacion
+    JOIN Cliente C ON R.IdCliente = C.Cedula
+    JOIN HabitacionesEmpresa HE ON H.IdDatosHabitacion = HE.IdHabitacion
+    WHERE HE.IdEmpresa = @IdEmpresa
+    AND TH.IdTipoHabitacion = @IdTipoHabitacion
+    AND F.FechaFacturacion BETWEEN @FechaInicio AND @FechaFin;
+END;
+
+-- > Por habitacion:
+-- Dia:
+CREATE PROCEDURE sp_FacturacionPorDiaHabitacion
+    @IdEmpresa VARCHAR(15),
+    @IdHabitacion SMALLINT,
+    @FechaDia DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT F.IdFacturacion, F.FechaFacturacion, F.MontoTotal, F.MetodoPago,
+           R.IdReservacion, R.FechaHoraIngreso, R.FechaHoraSalida, R.CantidadPersonas,
+           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, C.NombreCompleto AS Cliente
+    FROM Facturacion F
+    JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+    JOIN DatosHabitacion H ON R.IdHabitacion = H.IdDatosHabitacion
+    JOIN TipoHabitacion TH ON H.IdTipoHabitacion = TH.IdTipoHabitacion
+    JOIN Cliente C ON R.IdCliente = C.Cedula
+    JOIN HabitacionesEmpresa HE ON H.IdDatosHabitacion = HE.IdHabitacion
+    WHERE HE.IdEmpresa = @IdEmpresa
+    AND H.IdDatosHabitacion = @IdHabitacion
+    AND CAST(F.FechaFacturacion AS DATE) = @FechaDia;
+END;
+
+-- Mes:
+CREATE PROCEDURE sp_FacturacionPorMes_Habitacion
+    @IdEmpresa VARCHAR(15),
+    @IdHabitacion SMALLINT,
+    @Mes TINYINT,
+    @Anio SMALLINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT F.IdFacturacion, F.FechaFacturacion, F.MontoTotal, F.MetodoPago,
+           R.IdReservacion, R.FechaHoraIngreso, R.FechaHoraSalida, R.CantidadPersonas,
+           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, C.NombreCompleto AS Cliente
+    FROM Facturacion F
+    JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+    JOIN DatosHabitacion H ON R.IdHabitacion = H.IdDatosHabitacion
+    JOIN TipoHabitacion TH ON H.IdTipoHabitacion = TH.IdTipoHabitacion
+    JOIN Cliente C ON R.IdCliente = C.Cedula
+    JOIN HabitacionesEmpresa HE ON H.IdDatosHabitacion = HE.IdHabitacion
+    WHERE HE.IdEmpresa = @IdEmpresa
+    AND H.IdDatosHabitacion = @IdHabitacion
+    AND MONTH(F.FechaFacturacion) = @Mes
+    AND YEAR(F.FechaFacturacion) = @Anio;
+END;
+
+-- Anio:
+CREATE PROCEDURE sp_FacturacionPorAnio_Habitacion
+    @IdEmpresa VARCHAR(15),
+    @IdHabitacion SMALLINT,
+    @Anio SMALLINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT F.IdFacturacion, F.FechaFacturacion, F.MontoTotal, F.MetodoPago,
+           R.IdReservacion, R.FechaHoraIngreso, R.FechaHoraSalida, R.CantidadPersonas,
+           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, C.NombreCompleto AS Cliente
+    FROM Facturacion F
+    JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+    JOIN DatosHabitacion H ON R.IdHabitacion = H.IdDatosHabitacion
+    JOIN TipoHabitacion TH ON H.IdTipoHabitacion = TH.IdTipoHabitacion
+    JOIN Cliente C ON R.IdCliente = C.Cedula
+    JOIN HabitacionesEmpresa HE ON H.IdDatosHabitacion = HE.IdHabitacion
+    WHERE HE.IdEmpresa = @IdEmpresa
+    AND H.IdDatosHabitacion = @IdHabitacion
+    AND YEAR(F.FechaFacturacion) = @Anio;
+END;
+
+-- Rango de fechas:
+CREATE PROCEDURE sp_FacturacionPorRangoFechas_Habitacion
+    @IdEmpresa VARCHAR(15),
+    @IdHabitacion SMALLINT,
+    @FechaInicio DATE,
+    @FechaFin DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT F.IdFacturacion, F.FechaFacturacion, F.MontoTotal, F.MetodoPago,
+           R.IdReservacion, R.FechaHoraIngreso, R.FechaHoraSalida, R.CantidadPersonas,
+           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, C.NombreCompleto AS Cliente
+    FROM Facturacion F
+    JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+    JOIN DatosHabitacion H ON R.IdHabitacion = H.IdDatosHabitacion
+    JOIN TipoHabitacion TH ON H.IdTipoHabitacion = TH.IdTipoHabitacion
+    JOIN Cliente C ON R.IdCliente = C.Cedula
+    JOIN HabitacionesEmpresa HE ON H.IdDatosHabitacion = HE.IdHabitacion
+    WHERE HE.IdEmpresa = @IdEmpresa
+    AND H.IdDatosHabitacion = @IdHabitacion
+    AND F.FechaFacturacion BETWEEN @FechaInicio AND @FechaFin;
+END;
+
+
+
+-- CREATE PROCEDURE sp_FacturacionPorHabitacion
+--     @IdEmpresa VARCHAR(15),
+--     @IdHabitacion SMALLINT = NULL,
+--     @FechaInicio DATETIME = NULL,
+--     @FechaFin DATETIME = NULL
+-- AS
+-- BEGIN
+--     SET NOCOUNT ON;
+
+--     SELECT F.IdFacturacion, F.FechaFacturacion, F.MontoTotal, F.MetodoPago,
+--            R.IdReservacion, R.FechaHoraIngreso, R.FechaHoraSalida, R.CantidadPersonas,
+--            H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, C.NombreCompleto AS Cliente
+--     FROM Facturacion F
+--     JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+--     JOIN DatosHabitacion H ON R.IdHabitacion = H.IdDatosHabitacion
+--     JOIN TipoHabitacion TH ON H.IdTipoHabitacion = TH.IdTipoHabitacion
+--     JOIN Cliente C ON R.IdCliente = C.Cedula
+--     JOIN HabitacionesEmpresa HE ON H.IdDatosHabitacion = HE.IdHabitacion
+--     WHERE HE.IdEmpresa = @IdEmpresa
+--     AND (@IdHabitacion IS NULL OR H.IdDatosHabitacion = @IdHabitacion)
+--     AND (@FechaInicio IS NULL OR F.FechaFacturacion >= @FechaInicio)
+--     AND (@FechaFin IS NULL OR F.FechaFacturacion <= @FechaFin);
+-- END;
