@@ -2167,3 +2167,148 @@ END;
 
 -- Eliminar:
 
+
+
+
+-- y otro en caso de una busqueda general en donde no se especifique el si es empresa de hospedaje o de recreacion,
+
+-- - Busqueda general: 
+-- ========================== PApartado de busquedas =========================:
+
+-- >>> +++++++++++++++++++++ Clientes +++++++++++++++++++++++++++++++++++
+-->> Buscar empresas:
+-- > Hospedaje:
+CREATE PROCEDURE sp_BuscarEmpresasHospedaje -- Recibimos todos los datos que se podrian usar.
+    @NombreHotel VARCHAR(50) = NULL,
+    @IdTipoHotel SMALLINT = NULL,
+    @ReferenciaGPS GEOGRAPHY = NULL,
+    @ListaServicios VARCHAR(MAX) = NULL,
+    @Provincia VARCHAR(20) = NULL,
+    @Canton VARCHAR(30) = NULL,
+    @Distrito VARCHAR(30) = NULL,
+    @Barrio VARCHAR(40) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @ServiciosFiltrados TABLE (IdServicio SMALLINT);
+
+    -- Convertir la lista de servicios en una tabla
+    IF @ListaServicios IS NOT NULL
+    BEGIN
+        INSERT INTO @ServiciosFiltrados
+        SELECT VALUE FROM STRING_SPLIT(@ListaServicios, ',');
+    END;
+
+    SELECT DISTINCT E.*
+    FROM EmpresaHospedaje E
+    JOIN Direccion D ON E.IdDireccion = D.IdDireccion
+    LEFT JOIN ListaServiciosHospedaje LS ON E.CedulaJuridica = LS.IdEmpresa
+    LEFT JOIN ServiciosEstablecimiento SE ON LS.IdServicio = SE.IdServicio
+
+    WHERE (@NombreHotel IS NULL OR E.NombreHotel LIKE '%' + @NombreHotel + '%')
+    AND (@IdTipoHotel IS NULL OR E.IdTipoHotel = @IdTipoHotel)
+    AND (@ReferenciaGPS IS NULL OR E.ReferenciaGPS = @ReferenciaGPS)
+    AND (@ListaServicios IS NULL OR LS.IdServicio IN (SELECT IdServicio FROM @ServiciosFiltrados))
+    AND (@Provincia IS NULL OR D.Provincia = @Provincia)
+    AND (@Canton IS NULL OR D.Canton = @Canton)
+    AND (@Distrito IS NULL OR D.Distrito = @Distrito)
+    AND (@Barrio IS NULL OR D.Barrio = @Barrio); -- Realizamos la busqueda de coincidencias, en donde los valores no sean nulos.
+    -- En caso de ser nulo, significa que ese filtro no se uso.
+END;
+
+
+
+-- Recreacion: 
+CREATE PROCEDURE sp_BuscarEmpresasRecreacion
+    @NombreEmpresa VARCHAR(50) = NULL,
+    @NombreServicio VARCHAR(30) = NULL,
+    @ListaActividades VARCHAR(MAX) = NULL,
+    @Provincia VARCHAR(20) = NULL,
+    @Canton VARCHAR(30) = NULL,
+    @Distrito VARCHAR(30) = NULL,
+    @Barrio VARCHAR(40) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @ActividadesFiltradas TABLE (IdActividad SMALLINT);
+    
+    -- Convertir la lista de actividades separadas por comas en una tabla
+    IF @ListaActividades IS NOT NULL
+    BEGIN
+        INSERT INTO @ActividadesFiltradas
+        SELECT value FROM STRING_SPLIT(@ListaActividades, ',');
+    END;
+
+    SELECT DISTINCT E.*
+    FROM EmpresaRecreacion E
+    JOIN Direccion E ON E.IdDireccion = D.IdDireccion
+    LEFT JOIN ServiciosRecreacion S ON E.CedulaJuridica = S.IdEmpresa
+    LEFT JOIN ListaActividades A ON S.IdServicio = A.IdServicio
+    WHERE (@NombreEmpresa IS NULL OR E.NombreEmpresa LIKE '%' + @NombreEmpresa + '%')
+    AND (@NombreServicio IS NULL OR S.NombreServicio LIKE '%' + @NombreServicio + '%')
+    AND (@ListaActividades IS NULL OR L.IdActividad IN (SELECT IdActividad FROM @ActividadesFiltradas))
+    AND (@Provincia IS NULL OR D.Provincia = @Provincia)
+    AND (@Canton IS NULL OR D.Canton = @Canton)
+    AND (@Distrito IS NULL OR D.Distrito = @Distrito)
+    AND (@Barrio IS NULL OR D.Barrio = @Barrio);
+END;
+
+
+-- >>> Buscar habitaciones:
+CREATE PROCEDURE sp_BuscarHabitaciones
+    @NombreTipoHabitacion VARCHAR(40) = NULL,
+    @FechaEntrada DATETIME = NULL,
+    @FechaSalida DATETIME = NULL,
+    @IdTipoCama SMALLINT = NULL,
+    @ListaComodidades VARCHAR(MAX) = NULL,
+    @PrecioMin FLOAT = NULL,
+    @PrecioMax FLOAT = NULL,
+    @Provincia VARCHAR(20) = NULL,
+    @Canton VARCHAR(30) = NULL,
+    @Distrito VARCHAR(30) = NULL,
+    @Barrio VARCHAR(40) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @ComodidadesFiltradas TABLE (IdComodidad SMALLINT);
+    
+    -- Convertir lista de comodidades separadas por comas en unWa tabla
+    IF @ListaComodidades IS NOT NULL
+    BEGIN
+        INSERT INTO @ComodidadesFiltradas
+        SELECT value FROM STRING_SPLIT(@ListaComodidades, ',');
+    END;
+
+    SELECT DISTINCT H.*
+    FROM DatosHabitacion H
+    JOIN TipoHabitacion TH ON H.IdTipoHabitacion = TH.IdTipoHabitacion
+    JOIN TipoCama TC ON TH.IdTipoCama = TC.IdTipoCama
+    JOIN EmpresaHospedaje E ON TH.IdTipoHabitacion = E.IdTipoHotel
+    JOIN Direccion D ON E.IdDireccion = D.IdDireccion
+    LEFT JOIN ListaComodidades LC ON TH.IdTipoHabitacion = LC.IdTipoHabitacion
+    LEFT JOIN Reservacion R ON H.IdDatosHabitacion = R.IdHabitacion
+
+    WHERE (@NombreTipoHabitacion IS NULL OR TH.Nombre LIKE '%' + @NombreTipoHabitacion + '%')
+    AND (@IdTipoCama IS NULL OR TH.IdTipoCama = @IdTipoCama)
+    AND (@ListaComodidades IS NULL OR LC.IdComodidad IN (SELECT IdComodidad FROM @ComodidadesFiltradas))
+    AND (@PrecioMin IS NULL OR TH.Precio >= @PrecioMin)
+    AND (@PrecioMax IS NULL OR TH.Precio <= @PrecioMax)
+    AND (@Provincia IS NULL OR D.Provincia = @Provincia)
+    AND (@Canton IS NULL OR D.Canton = @Canton)
+    AND (@Distrito IS NULL OR D.Distrito = @Distrito)
+    AND (@Barrio IS NULL OR D.Barrio = @Barrio)
+
+    -- Revisar que las habitaciones esten disponibles en el rango de fechas seleccionado.
+    AND (@FechaEntrada IS NULL OR NOT EXISTS (
+        SELECT 1 FROM Reservacion R2 WHERE R2.IdHabitacion = H.IdDatosHabitacion
+        AND (
+            (@FechaEntrada BETWEEN R2.FechaHoraIngreso AND R2.FechaHoraSalida) OR
+            (@FechaSalida BETWEEN R2.FechaHoraIngreso AND R2.FechaHoraSalida) OR
+            (R2.FechaHoraIngreso BETWEEN @FechaEntrada AND @FechaSalida) OR
+            (R2.FechaHoraSalida BETWEEN @FechaEntrada AND @FechaSalida)
+        )
+    ));
+END;
