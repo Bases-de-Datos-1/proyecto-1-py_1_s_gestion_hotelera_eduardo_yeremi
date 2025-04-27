@@ -178,9 +178,11 @@ CREATE TABLE Reservacion (
 CREATE TABLE Facturacion (
     IdFacturacion SMALLINT IDENTITY(1,1) PRIMARY KEY,
     IdReservacion SMALLINT NOT NULL,
+    FechaFacturacion DATE NOT NULL DEFAULT GETDATE(), -- Le asignamos por defecto la fecha actual.
     MetodoPago VARCHAR(10) NOT NULL CHECK (MetodoPago IN ('Efectivo', 'Tarjeta')),
     CONSTRAINT FK_Facturacion_Reservacion FOREIGN KEY (IdReservacion) REFERENCES Reservacion(IdReservacion)
 );
+
 
 -- Tabla: EmpresaRecreacion
 CREATE TABLE EmpresaRecreacion (
@@ -1776,24 +1778,28 @@ END;
 CREATE PROCEDURE sp_ActualizarFacturacion
     @IdFacturacion SMALLINT,
     @MetodoPago VARCHAR(10),
+    @FechaFacturacion DATE,
     @Resultado SMALLINT OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
 
+    -- Verifica si la factura existe
     IF EXISTS (SELECT 1 FROM Facturacion WHERE IdFacturacion = @IdFacturacion)
     BEGIN
         UPDATE Facturacion
-        SET MetodoPago = @MetodoPago
+        SET MetodoPago = @MetodoPago,
+            FechaFacturacion = @FechaFacturacion
         WHERE IdFacturacion = @IdFacturacion;
 
         SET @Resultado = 1;  
     END
     ELSE
     BEGIN
-        SET @Resultado = -1;  
+        SET @Resultado = -1; 
     END
 END;
+
 
 -- Eliminar:
 CREATE PROCEDURE sp_EliminarFacturacion
@@ -1810,7 +1816,7 @@ BEGIN
         JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
         JOIN HabitacionesEmpresa H ON R.IdHabitacion = H.IdHabitacion
         WHERE F.IdFacturacion = @IdFacturacion AND H.IdEmpresa = @IdEmpresa
-    )
+    ) 
     BEGIN
         DELETE FROM Facturacion WHERE IdFacturacion = @IdFacturacion;
         SET @Resultado = 1;  
@@ -1820,7 +1826,7 @@ BEGIN
         SET @Resultado = -1; 
     END
 END;
-
+-- drop procedure 
 -- ========================== Para la tabla de EmpresaRecreacion:
 
 -- Agregar
@@ -2240,7 +2246,7 @@ BEGIN
         INSERT INTO @ActividadesFiltradas
         SELECT value FROM STRING_SPLIT(@ListaActividades, ',');
     END;
-
+    -- En teoria todas son distintas, pero dijeron que era mejor hacerlo asi.
     SELECT DISTINCT E.*
     FROM EmpresaRecreacion E
     JOIN Direccion E ON E.IdDireccion = D.IdDireccion
@@ -2275,21 +2281,26 @@ BEGIN
 
     DECLARE @ComodidadesFiltradas TABLE (IdComodidad SMALLINT);
     
-    -- Convertir lista de comodidades separadas por comas en unWa tabla
+    -- Convertir lista de comodidades separadas por comas en una tabla
     IF @ListaComodidades IS NOT NULL
     BEGIN
         INSERT INTO @ComodidadesFiltradas
-        SELECT value FROM STRING_SPLIT(@ListaComodidades, ',');
+        SELECT VALUE FROM STRING_SPLIT(@ListaComodidades, ',');
     END;
 
-    SELECT DISTINCT H.*
-    FROM DatosHabitacion H
-    JOIN TipoHabitacion TH ON H.IdTipoHabitacion = TH.IdTipoHabitacion
-    JOIN TipoCama TC ON TH.IdTipoCama = TC.IdTipoCama
-    JOIN EmpresaHospedaje E ON TH.IdTipoHabitacion = E.IdTipoHotel
-    JOIN Direccion D ON E.IdDireccion = D.IdDireccion
-    LEFT JOIN ListaComodidades LC ON TH.IdTipoHabitacion = LC.IdTipoHabitacion
-    LEFT JOIN Reservacion R ON H.IdDatosHabitacion = R.IdHabitacion
+    -- Seleccionamos las habitaciones distintas (hay varias habitaciones que tienen nada mas diferente el numero en la misma empresa) con los parámetros definidos
+    SELECT DISTINCT H.IdDatosHabitacion, H.Numero AS NumeroHabitacion, 
+           TH.Nombre AS TipoHabitacion, TH.Precio, 
+           TC.Nombre AS TipoCama, 
+           E.NombreHotel AS EmpresaHospedaje,
+           D.Provincia, D.Canton, D.Distrito, D.Barrio
+    FROM DATOSHABITACION H
+    JOIN TIPOHABITACION TH ON H.IdTipoHabitacion = TH.IdTipoHabitacion
+    JOIN TIPOCAMA TC ON TH.IdTipoCama = TC.IdTipoCama
+    JOIN EMPRESAHOSPEDAJE E ON TH.IdTipoHabitacion = E.IdTipoHotel
+    JOIN DIRECCION D ON E.IdDireccion = D.IdDireccion
+    LEFT JOIN LISTACOMODIDADES LC ON TH.IdTipoHabitacion = LC.IdTipoHabitacion
+    LEFT JOIN RESERVACION R ON H.IdDatosHabitacion = R.IdHabitacion
 
     WHERE (@NombreTipoHabitacion IS NULL OR TH.Nombre LIKE '%' + @NombreTipoHabitacion + '%')
     AND (@IdTipoCama IS NULL OR TH.IdTipoCama = @IdTipoCama)
@@ -2301,9 +2312,9 @@ BEGIN
     AND (@Distrito IS NULL OR D.Distrito = @Distrito)
     AND (@Barrio IS NULL OR D.Barrio = @Barrio)
 
-    -- Revisar que las habitaciones esten disponibles en el rango de fechas seleccionado.
+    -- Revisar disponibilidad de habitaciones en el rango de fechas seleccionado
     AND (@FechaEntrada IS NULL OR NOT EXISTS (
-        SELECT 1 FROM Reservacion R2 WHERE R2.IdHabitacion = H.IdDatosHabitacion
+        SELECT 1 FROM RESERVACION R2 WHERE R2.IdHabitacion = H.IdDatosHabitacion
         AND (
             (@FechaEntrada BETWEEN R2.FechaHoraIngreso AND R2.FechaHoraSalida) OR
             (@FechaSalida BETWEEN R2.FechaHoraIngreso AND R2.FechaHoraSalida) OR
@@ -2312,6 +2323,7 @@ BEGIN
         )
     ));
 END;
+
 
 
 -- >>> +++++++++++++++++++++ Empresas +++++++++++++++++++++++++++++++++++
@@ -2326,9 +2338,9 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT F.IdFacturacion, F.FechaFacturacion, F.MontoTotal, F.MetodoPago,
+    SELECT F.IdFacturacion, F.FechaFacturacion, F.MetodoPago,
            R.IdReservacion, R.FechaHoraIngreso, R.FechaHoraSalida, R.CantidadPersonas,
-           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, C.NombreCompleto AS Cliente
+           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, TH.Precio, C.NombreCompleto AS Cliente
     FROM Facturacion F
     JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
     JOIN DatosHabitacion H ON R.IdHabitacion = H.IdDatosHabitacion
@@ -2337,7 +2349,7 @@ BEGIN
     JOIN HabitacionesEmpresa HE ON H.IdDatosHabitacion = HE.IdHabitacion
     WHERE HE.IdEmpresa = @IdEmpresa
     AND TH.IdTipoHabitacion = @IdTipoHabitacion
-    AND CAST(F.FechaFacturacion AS DATE) = @FechaDia;
+    AND F.FechaFacturacion = @FechaDia;
 END;
 
 -- Mes:
@@ -2350,9 +2362,9 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT F.IdFacturacion, F.FechaFacturacion, F.MontoTotal, F.MetodoPago,
+    SELECT F.IdFacturacion, F.FechaFacturacion, F.MetodoPago,
            R.IdReservacion, R.FechaHoraIngreso, R.FechaHoraSalida, R.CantidadPersonas,
-           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, C.NombreCompleto AS Cliente
+           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, TH.Precio, C.NombreCompleto AS Cliente
     FROM Facturacion F
     JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
     JOIN DatosHabitacion H ON R.IdHabitacion = H.IdDatosHabitacion
@@ -2374,9 +2386,9 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT F.IdFacturacion, F.FechaFacturacion, F.MontoTotal, F.MetodoPago,
+    SELECT F.IdFacturacion, F.FechaFacturacion, F.MetodoPago,
            R.IdReservacion, R.FechaHoraIngreso, R.FechaHoraSalida, R.CantidadPersonas,
-           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, C.NombreCompleto AS Cliente
+           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, TH.Precio, C.NombreCompleto AS Cliente
     FROM Facturacion F
     JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
     JOIN DatosHabitacion H ON R.IdHabitacion = H.IdDatosHabitacion
@@ -2389,7 +2401,7 @@ BEGIN
 END;
 
 -- Rango de fechas:
-CREATE PROCEDURE sp_FacturacionPorRangoFechas_TipoHabitacion
+CREATE PROCEDURE sp_FacturacionPorRangoFechasTipoHabitacion
     @IdEmpresa VARCHAR(15),
     @IdTipoHabitacion SMALLINT,
     @FechaInicio DATE,
@@ -2398,9 +2410,9 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT F.IdFacturacion, F.FechaFacturacion, F.MontoTotal, F.MetodoPago,
+    SELECT F.IdFacturacion, F.FechaFacturacion, F.MetodoPago,
            R.IdReservacion, R.FechaHoraIngreso, R.FechaHoraSalida, R.CantidadPersonas,
-           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, C.NombreCompleto AS Cliente
+           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, TH.Precio, C.NombreCompleto AS Cliente
     FROM Facturacion F
     JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
     JOIN DatosHabitacion H ON R.IdHabitacion = H.IdDatosHabitacion
@@ -2422,9 +2434,9 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT F.IdFacturacion, F.FechaFacturacion, F.MontoTotal, F.MetodoPago,
+    SELECT F.IdFacturacion, F.FechaFacturacion, F.MetodoPago,
            R.IdReservacion, R.FechaHoraIngreso, R.FechaHoraSalida, R.CantidadPersonas,
-           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, C.NombreCompleto AS Cliente
+           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, TH.Precio, C.NombreCompleto AS Cliente
     FROM Facturacion F
     JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
     JOIN DatosHabitacion H ON R.IdHabitacion = H.IdDatosHabitacion
@@ -2433,11 +2445,11 @@ BEGIN
     JOIN HabitacionesEmpresa HE ON H.IdDatosHabitacion = HE.IdHabitacion
     WHERE HE.IdEmpresa = @IdEmpresa
     AND H.IdDatosHabitacion = @IdHabitacion
-    AND CAST(F.FechaFacturacion AS DATE) = @FechaDia;
+    AND F.FechaFacturacion = @FechaDia;
 END;
 
 -- Mes:
-CREATE PROCEDURE sp_FacturacionPorMes_Habitacion
+CREATE PROCEDURE sp_FacturacionPorMesHabitacion
     @IdEmpresa VARCHAR(15),
     @IdHabitacion SMALLINT,
     @Mes TINYINT,
@@ -2446,9 +2458,9 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT F.IdFacturacion, F.FechaFacturacion, F.MontoTotal, F.MetodoPago,
+    SELECT F.IdFacturacion, F.FechaFacturacion, F.MetodoPago,
            R.IdReservacion, R.FechaHoraIngreso, R.FechaHoraSalida, R.CantidadPersonas,
-           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, C.NombreCompleto AS Cliente
+           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, TH.Precio, C.NombreCompleto AS Cliente
     FROM Facturacion F
     JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
     JOIN DatosHabitacion H ON R.IdHabitacion = H.IdDatosHabitacion
@@ -2462,7 +2474,7 @@ BEGIN
 END;
 
 -- Anio:
-CREATE PROCEDURE sp_FacturacionPorAnio_Habitacion
+CREATE PROCEDURE sp_FacturacionPorAnioHabitacion
     @IdEmpresa VARCHAR(15),
     @IdHabitacion SMALLINT,
     @Anio SMALLINT
@@ -2470,9 +2482,9 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT F.IdFacturacion, F.FechaFacturacion, F.MontoTotal, F.MetodoPago,
+    SELECT F.IdFacturacion, F.FechaFacturacion, F.MetodoPago,
            R.IdReservacion, R.FechaHoraIngreso, R.FechaHoraSalida, R.CantidadPersonas,
-           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, C.NombreCompleto AS Cliente
+           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, TH.Precio, C.NombreCompleto AS Cliente
     FROM Facturacion F
     JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
     JOIN DatosHabitacion H ON R.IdHabitacion = H.IdDatosHabitacion
@@ -2485,7 +2497,7 @@ BEGIN
 END;
 
 -- Rango de fechas:
-CREATE PROCEDURE sp_FacturacionPorRangoFechas_Habitacion
+CREATE PROCEDURE sp_FacturacionPorRangoFechasHabitacion
     @IdEmpresa VARCHAR(15),
     @IdHabitacion SMALLINT,
     @FechaInicio DATE,
@@ -2494,9 +2506,9 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT F.IdFacturacion, F.FechaFacturacion, F.MontoTotal, F.MetodoPago,
+    SELECT F.IdFacturacion, F.FechaFacturacion, F.MetodoPago,
            R.IdReservacion, R.FechaHoraIngreso, R.FechaHoraSalida, R.CantidadPersonas,
-           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, C.NombreCompleto AS Cliente
+           H.Numero AS NumeroHabitacion, TH.Nombre AS TipoHabitacion, TH.Precio, C.NombreCompleto AS Cliente
     FROM Facturacion F
     JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
     JOIN DatosHabitacion H ON R.IdHabitacion = H.IdDatosHabitacion
@@ -2533,3 +2545,162 @@ END;
 --     AND (@FechaInicio IS NULL OR F.FechaFacturacion >= @FechaInicio)
 --     AND (@FechaFin IS NULL OR F.FechaFacturacion <= @FechaFin);
 -- END;
+
+
+-- ======================= Algunas busquedas para empresa de hospedaje ===================================
+-- Buscar empresa por su id:
+CREATE PROCEDURE sp_ObtenerDatosEmpresaHospedaje
+    @IdEmpresa VARCHAR(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT E.CedulaJuridica, 
+            E.NombreHotel, 
+            E.IdTipoHotel, 
+            E.ReferenciaGPS,
+           D.IdDireccion, 
+           D.Provincia, 
+           D.Canton, 
+           D.Distrito, 
+           D.Barrio, 
+           D.SeñasExactas,
+           E.Telefono,
+           E.CorreoElectronico,
+           E.SitioWeb,
+           STRING_AGG(SE.NombreServicio, ', ') AS Servicios -- Creamos una cadena con los nombre de todos los servicios
+    FROM EmpresaHospedaje E
+    JOIN Direccion D ON E.IdDireccion = D.IdDireccion
+    LEFT JOIN ListaServiciosHospedaje LSH ON E.CedulaJuridica = LSH.IdEmpresa
+    LEFT JOIN ServiciosEstablecimiento SE ON LSH.IdServicio = SE.IdServicio
+    WHERE E.CedulaJuridica = @IdEmpresa
+    -- Agrupasmos por lo de los valores similares.
+    GROUP BY E.CedulaJuridica, E.NombreHotel, E.IdTipoHotel, E.ReferenciaGPS,
+             D.IdDireccion, D.Provincia, D.Canton, D.Distrito, D.Barrio, D.SeñasExactas,
+             E.Telefono;
+END;
+
+-- Optener las redes sociales de la empresa:
+CREATE PROCEDURE sp_ObtenerRedesSocialesEmpresa
+    @IdEmpresa VARCHAR(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT LRS.IdRedSocial, RS.NombreRed, RS.Enlace
+    FROM ListaRedesSociales LRS
+    JOIN RedesSociales RS ON LRS.IdRedSocial = RS.IdRedSocial
+    WHERE LRS.IdEmpresa = @IdEmpresa;
+END;
+
+-- Optener los tipos de habitaciones 
+CREATE PROCEDURE sp_ObtenerTiposHabitacionEmpresa
+    @IdEmpresa VARCHAR(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT TH.*, F.Imagen AS Foto
+    FROM TipoHabitacionesEmpresa TE
+    JOIN TipoHabitacion TH ON TE.IdTipoHabitacion = TH.IdTipoHabitacion
+    LEFT JOIN Fotos F ON TH.IdTipoHabitacion = FTH.IdTipoHabitacion
+    WHERE TE.IdEmpresa = @IdEmpresa;
+END;
+
+-- Optener toas las habitaciones 
+CREATE PROCEDURE sp_ObtenerHabitacionesEmpresa
+    @IdEmpresa VARCHAR(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT H.*, F.Imagen AS Foto
+    FROM HabitacionesEmpresa HE
+    JOIN DatosHabitacion H ON HE.IdHabitacion = H.IdDatosHabitacion
+    LEFT JOIN Fotos F ON H.IdDatosHabitacion = F.IdHabitacion
+    WHERE HE.IdEmpresa = @IdEmpresa;
+END;
+
+-- ======================= Algunas busquedas para empresa de recreacion ===================================
+
+-- Busar empresa de recreacion por id:
+
+CREATE PROCEDURE sp_ObtenerDatosEmpresaRecreacion
+    @IdEmpresa VARCHAR(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT E.CedulaJuridica, 
+           E.NombreEmpresa, 
+           D.IdDireccion, 
+           D.Provincia, 
+           D.Canton, 
+           D.Distrito, 
+           D.Barrio, 
+           D.SeñasExactas,
+           E.Telefono, 
+           E.NombreContacto, 
+           E.CorreoElectronico
+    FROM EmpresaRecreacion E
+    JOIN Direccion D ON E.IdDireccion = D.IdDireccion
+    WHERE E.CedulaJuridica = @IdEmpresa;
+END;
+
+-- Optener los servicios de la empresa de recreacion:
+CREATE PROCEDURE sp_ObtenerServiciosEmpresaRecreacion
+    @IdEmpresa VARCHAR(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT IdServicio, NombreServicio, Precio
+    FROM ServiciosRecreacion
+    WHERE IdEmpresa = @IdEmpresa;
+END;
+
+-- Optener las actividades que conforman un servicio:
+CREATE PROCEDURE sp_ObtenerActividadesPorServicio
+    @IdServicio SMALLINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT A.IdActividad, A.NombreActividad, A.DescripcionActividad
+    FROM ListaActividades LA
+    JOIN Actividad A ON LA.IdActividad = A.IdActividad
+    WHERE LA.IdServicio = @IdServicio;
+END;
+
+
+
+-- ======================= Algunas busquedas para los clientes ===================================
+-- Buscar clientes (Lo de la direccion esta dando problemas)
+
+CREATE PROCEDURE sp_ObtenerDatosCliente
+    @Cedula VARCHAR(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT C.Cedula, C.NombreCompleto, C.TipoIdentificacion, C.PaisResidencia, C.FechaNacimiento,
+           CASE WHEN C.PaisResidencia = 'Costa Rica' THEN D.Provincia ELSE NULL END AS Provincia,-- Estos case nos ayudan a que , podamos saber si debemos opener los datos de ubicacion o no.
+           CASE WHEN C.PaisResidencia = 'Costa Rica' THEN D.Canton ELSE NULL END AS Canton,
+           CASE WHEN C.PaisResidencia = 'Costa Rica' THEN D.Distrito ELSE NULL END AS Distrito
+    FROM Cliente C
+    LEFT JOIN Direccion D ON C.IdDireccion = D.IdDireccion
+    WHERE C.Cedula = @Cedula;
+END;
+
+-- Optener los telefonos de un cliente:
+
+CREATE PROCEDURE sp_ObtenerTelefonosCliente
+    @Cedula VARCHAR(15)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT T.IdTelefono, T.CodigoPais, T.NumeroTelefonico
+    FROM Telefono T
+    WHERE T.IdUsuario = @Cedula;
+END;
