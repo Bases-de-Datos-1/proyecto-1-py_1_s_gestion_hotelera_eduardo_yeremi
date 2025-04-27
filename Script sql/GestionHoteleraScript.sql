@@ -28,11 +28,11 @@ CREATE TABLE EmpresaHospedaje (
     CedulaJuridica VARCHAR(15) PRIMARY KEY,
     NombreHotel VARCHAR(50) NOT NULL,
     IdTipoHotel SMALLINT NOT NULL,
-    IdDireccion SMALLINT NOT NULL,
+    IdDireccion SMALLINT NOT NULL UNIQUE,
     ReferenciaGPS GEOGRAPHY NOT NULL,
     CorreoElectronico VARCHAR(50) NOT NULL UNIQUE,
-    SitioWeb VARCHAR(50) NULL UNIQUE,
-    Telefono VARCHAR(15) NOT NULL UNIQUE,
+    SitioWeb VARCHAR(255) NULL UNIQUE,
+    Telefono VARCHAR(10) NOT NULL UNIQUE,
     CONSTRAINT FK_Empresa_Direccion FOREIGN KEY (IdDireccion) REFERENCES Direccion(IdDireccion),
     CONSTRAINT FK_Tipo_Hotel_Empresa FOREIGN KEY (IdDireccion) REFERENCES TipoInstalacion(IdTipoInstalacion)
 );
@@ -91,8 +91,8 @@ CREATE TABLE TipoHabitacion (
 CREATE TABLE Fotos (
 
     IdImagen SMALLINT IDENTITY(1,1)  PRIMARY KEY,
-    IdTipoHabitacion SMALLINT,
-    Imagen VARBINARY(MAX),
+    IdTipoHabitacion SMALLINT NOT NULL,
+    Imagen VARBINARY(MAX) NOT NULL,
 
     CONSTRAINT FK_Foto_TipoHabitacion FOREIGN KEY (IdTipoHabitacion) REFERENCES TipoHabitacion(IdTipoHabitacion)
 
@@ -210,7 +210,7 @@ CREATE TABLE Actividad (
     IdEmpresa VARCHAR(15) NOT NULL,
     NombreActividad VARCHAR(30) NOT NULL,
     DescripcionActividad VARCHAR(100) NOT NULL,
-    CONSTRAINT FK_ Actividad_EmpresaRecreacion FOREIGN KEY (IdEmpresa) REFERENCES EmpresaRecreacion(CedulaJuridica)
+    CONSTRAINT FK_Actividad_EmpresaRecreacion FOREIGN KEY (IdEmpresa) REFERENCES EmpresaRecreacion(CedulaJuridica)
 
 );
 
@@ -224,13 +224,13 @@ CREATE TABLE ListaActividades (
 );
 
 -- Tabla: ActividadesRecreacionPorEmpresa
-CREATE TABLE ActividadesRecreacionPorEmpresa (
-    IdEmpresa VARCHAR(15) NOT NULL,
-    IdActividad SMALLINT NOT NULL,
-    PRIMARY KEY (IdEmpresa, IdActividad),
-    FOREIGN KEY (IdEmpresa) REFERENCES EmpresaRecreacion(CedulaJuridica),
-    FOREIGN KEY (IdActividad) REFERENCES Actividad(IdActividad)
-);
+-- CREATE TABLE ActividadesRecreacionPorEmpresa (
+--     IdEmpresa VARCHAR(15) NOT NULL,
+--     IdActividad SMALLINT NOT NULL,
+--     PRIMARY KEY (IdEmpresa, IdActividad),
+--     FOREIGN KEY (IdEmpresa) REFERENCES EmpresaRecreacion(CedulaJuridica),
+--     FOREIGN KEY (IdActividad) REFERENCES Actividad(IdActividad)
+-- );
 
 
 
@@ -252,25 +252,25 @@ CREATE TABLE ActividadesRecreacionPorEmpresa (
 --     END
 -- END;
 
--- Trigger para validar que los clientes no puedan registrar mas de tres telefonos.
-CREATE TRIGGER trg_LimiteTelefonoCliente
-ON Telefono
-AFTER INSERT, UPDATE
-AS
-BEGIN
-    SET NOCOUNT ON;
+-- Trigger para validar que los clientes no puedan registrar mas de tres telefonos (Esto ahora lo validamos a la hora de registrar telefonos.).
+-- CREATE TRIGGER trg_LimiteTelefonoCliente
+-- ON Telefono
+-- AFTER INSERT, UPDATE
+-- AS
+-- BEGIN
+--     SET NOCOUNT ON;
 
-    IF EXISTS (
-        SELECT IdUsuario
-        FROM Telefono
-        GROUP BY IdUsuario
-        HAVING COUNT(IdTelefono) > 3
-    )
-    BEGIN
-        PRINT 'Error: Un cliente no puede tener más de 3 números de teléfono.';
-        ROLLBACK TRANSACTION;
-    END
-END;
+--     IF EXISTS (
+--         SELECT IdUsuario
+--         FROM Telefono
+--         GROUP BY IdUsuario
+--         HAVING COUNT(IdTelefono) > 3
+--     )
+--     BEGIN
+--         PRINT 'Error: Un cliente no puede tener más de 3 números de teléfono.';
+--         ROLLBACK TRANSACTION;
+--     END
+-- END;
 
 -- Videito sobre procedure: https://www.youtube.com/watch?v=8sCrjt5e2Yk&ab_channel=INFORMATICONFIG
 -- ========================== Para la tabla de Direccion:
