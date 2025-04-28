@@ -2,8 +2,9 @@
 # [Sistema de gestion hotelera]
 ### Nombre y carné de los integrantes: 
 - Eduardo Rojas Gomez [2023152827]
-- Yeremi Calvo Porras []
+- Yeremi Calvo Porras [2023083332]
 
 ### Estado del proyecto:
+- [Bueno]
 ### Enlace del video:
 Recordar que el video debe ser público para ser visto por el profesor
