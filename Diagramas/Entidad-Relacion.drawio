@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e">
     <diagram id="k_TsYjigaLnIS3aELAj9" name="Page-1">
-        <mxGraphModel dx="3028" dy="1868" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+        <mxGraphModel dx="2567" dy="1813" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -993,7 +993,7 @@
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
                 <mxCell id="518" value="IdDireccion" style="ellipse;whiteSpace=wrap;html=1;" parent="1" vertex="1">
-                    <mxGeometry x="355" y="1208.75" width="120" height="80" as="geometry"/>
+                    <mxGeometry x="440" y="1143.75" width="120" height="80" as="geometry"/>
                 </mxCell>
                 <mxCell id="520" value="IdDireccion" style="ellipse;whiteSpace=wrap;html=1;" parent="1" vertex="1">
                     <mxGeometry x="-665" y="763.75" width="120" height="80" as="geometry"/>
@@ -1053,6 +1053,12 @@
                 </mxCell>
                 <mxCell id="576" value="NombreEmpresa" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
                     <mxGeometry x="-495" y="961.25" width="120" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="607" style="edgeStyle=none;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;endArrow=none;endFill=0;" edge="1" parent="1" source="606" target="100">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="606" value="CorreoElectronico" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="330" y="1181.25" width="120" height="80" as="geometry"/>
                 </mxCell>
             </root>
         </mxGraphModel>

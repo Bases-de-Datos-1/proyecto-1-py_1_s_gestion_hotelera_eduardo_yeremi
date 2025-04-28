@@ -148,6 +148,7 @@ CREATE TABLE Cliente (
     TipoIdentificacion VARCHAR(20) NOT NULL,
     PaisResidencia VARCHAR(50) NOT NULL,
     FechaNacimiento DATE CHECK (FechaNacimiento < GETDATE()) NOT NULL,
+    CorreoElectronico Varchar(50) NOT NULL UNIQUE,
     IdDireccion SMALLINT NULL,
     CONSTRAINT FK_Cliente_Direccion FOREIGN KEY (IdDireccion) REFERENCES Direccion(IdDireccion)
 );
@@ -1468,16 +1469,16 @@ CREATE PROCEDURE sp_AgregarCliente
     @TipoIdentificacion VARCHAR(20),
     @PaisResidencia VARCHAR(50),
     @FechaNacimiento DATE,
+    @CorreoElectronico VARCHAR(50),
     @IdDireccion SMALLINT,
     @Resultado SMALLINT OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
-
-    IF NOT EXISTS (SELECT 1 FROM Cliente WHERE Cedula = @Cedula)
+    IF NOT EXISTS (SELECT 1 FROM Cliente WHERE Cedula = @Cedula OR CorreoElectronico = @CorreoElectronico)
     BEGIN
-        INSERT INTO Cliente (Cedula, NombreCompleto, TipoIdentificacion, PaisResidencia, FechaNacimiento, IdDireccion)
-        VALUES (@Cedula, @NombreCompleto, @TipoIdentificacion, @PaisResidencia, @FechaNacimiento, @IdDireccion);
+        INSERT INTO Cliente (Cedula, NombreCompleto, TipoIdentificacion, PaisResidencia, FechaNacimiento, CorreoElectronico, IdDireccion)
+        VALUES (@Cedula, @NombreCompleto, @TipoIdentificacion, @PaisResidencia, @FechaNacimiento, @CorreoElectronico, @IdDireccion);
 
         SET @Resultado = 1;  
     END
@@ -1486,6 +1487,7 @@ BEGIN
         SET @Resultado = -1; 
     END
 END;
+
 
 -- Editar
 CREATE PROCEDURE sp_ActualizarCliente
@@ -2233,7 +2235,6 @@ CREATE PROCEDURE sp_BuscarEmpresasRecreacion
     @Provincia VARCHAR(20) = NULL,
     @Canton VARCHAR(30) = NULL,
     @Distrito VARCHAR(30) = NULL,
-    @Barrio VARCHAR(40) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -2258,7 +2259,7 @@ BEGIN
     AND (@Provincia IS NULL OR D.Provincia = @Provincia)
     AND (@Canton IS NULL OR D.Canton = @Canton)
     AND (@Distrito IS NULL OR D.Distrito = @Distrito)
-    AND (@Barrio IS NULL OR D.Barrio = @Barrio);
+
 END;
 
 
@@ -2521,6 +2522,27 @@ BEGIN
 END;
 
 
+-- Buscar facturas especifica:
+CREATE PROCEDURE sp_ObtenerDetallesHospedajePorFactura
+    @IdFacturacion SMALLINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT 
+        F.IdFacturacion,
+        R.IdReservacion,
+        DH.Numero AS NumeroHabitacion,
+        DATEDIFF(DAY, R.FechaHoraIngreso, R.FechaHoraSalida) AS NumeroNoches,
+        TH.Precio * DATEDIFF(DAY, R.FechaHoraIngreso, R.FechaHoraSalida) AS ImporteTotal
+    FROM Facturacion F
+    JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+    JOIN DatosHabitacion DH ON R.IdHabitacion = DH.IdDatosHabitacion
+    JOIN TipoHabitacion TH ON DH.IdTipoHabitacion = TH.IdTipoHabitacion
+    WHERE F.IdFacturacion = @IdFacturacion;
+END;
+
+
 
 -- CREATE PROCEDURE sp_FacturacionPorHabitacion
 --     @IdEmpresa VARCHAR(15),
@@ -2672,6 +2694,37 @@ BEGIN
     WHERE LA.IdServicio = @IdServicio;
 END;
 
+-- Buscar servicios para el catalogo:
+
+CREATE PROCEDURE sp_BuscarServiciosRecreacion
+    @NombreServicio VARCHAR(30) = NULL,
+    @PrecioMin FLOAT = NULL,
+    @PrecioMax FLOAT = NULL,
+    @ListaActividades VARCHAR(MAX) = NULL,
+    @Provincia VARCHAR(20) = NULL,
+    @Canton VARCHAR(30) = NULL,
+    @Distrito VARCHAR(30) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT DISTINCT SR.IdServicio, SR.NombreServicio, SR.Precio, 
+           ER.NombreEmpresa, D.Provincia, D.Canton, D.Distrito,
+           STRING_AGG(A.NombreActividad, ', ') AS Actividades
+    FROM ServiciosRecreacion SR
+    JOIN EmpresaRecreacion ER ON SR.IdEmpresa = ER.CedulaJuridica
+    JOIN Direccion D ON ER.IdDireccion = D.IdDireccion
+    LEFT JOIN ListaActividades LA ON SR.IdServicio = LA.IdServicio
+    LEFT JOIN Actividad A ON LA.IdActividad = A.IdActividad
+    WHERE (@NombreServicio IS NULL OR SR.NombreServicio LIKE '%' + @NombreServicio + '%')
+    AND (@PrecioMin IS NULL OR SR.Precio >= @PrecioMin)
+    AND (@PrecioMax IS NULL OR SR.Precio <= @PrecioMax)
+    AND (@ListaActividades IS NULL OR A.NombreActividad IN (SELECT value FROM STRING_SPLIT(@ListaActividades, ',')))
+    AND (@Provincia IS NULL OR D.Provincia = @Provincia)
+    AND (@Canton IS NULL OR D.Canton = @Canton)
+    AND (@Distrito IS NULL OR D.Distrito = @Distrito)
+    GROUP BY SR.IdServicio, SR.NombreServicio, SR.Precio, ER.NombreEmpresa, D.Provincia, D.Canton, D.Distrito;
+END;
 
 
 -- ======================= Algunas busquedas para los clientes ===================================
@@ -2683,7 +2736,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT C.Cedula, C.NombreCompleto, C.TipoIdentificacion, C.PaisResidencia, C.FechaNacimiento,
+    SELECT C.Cedula, C.NombreCompleto, C.TipoIdentificacion, C.PaisResidencia, C.FechaNacimiento, C.CorreoElectronico,
            CASE WHEN C.PaisResidencia = 'Costa Rica' THEN D.Provincia ELSE NULL END AS Provincia,-- Estos case nos ayudan a que , podamos saber si debemos opener los datos de ubicacion o no.
            CASE WHEN C.PaisResidencia = 'Costa Rica' THEN D.Canton ELSE NULL END AS Canton,
            CASE WHEN C.PaisResidencia = 'Costa Rica' THEN D.Distrito ELSE NULL END AS Distrito
