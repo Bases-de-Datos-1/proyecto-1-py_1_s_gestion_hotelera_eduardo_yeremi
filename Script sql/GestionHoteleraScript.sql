@@ -224,56 +224,15 @@ CREATE TABLE ListaActividades (
     CONSTRAINT FK_ActividadRecreacion_Lista FOREIGN KEY (IdActividad) REFERENCES Actividad(IdActividad)
 );
 
--- Tabla: ActividadesRecreacionPorEmpresa
--- CREATE TABLE ActividadesRecreacionPorEmpresa (
---     IdEmpresa VARCHAR(15) NOT NULL,
---     IdActividad SMALLINT NOT NULL,
---     PRIMARY KEY (IdEmpresa, IdActividad),
---     FOREIGN KEY (IdEmpresa) REFERENCES EmpresaRecreacion(CedulaJuridica),
---     FOREIGN KEY (IdActividad) REFERENCES Actividad(IdActividad)
--- );
-
-
-
--- Podemos agregar este trigger, para hacer lo de la validacion de fechas:
--- Creación del TRIGGER para validar la relación entre FechaHoraIngreso y FechaHoraSalida
--- CREATE TRIGGER trg_ValidarFechasReservacion
--- ON Reservacion
--- AFTER INSERT, UPDATE
--- AS
--- BEGIN
---     SET NOCOUNT ON;
-    
---     IF EXISTS (
---         SELECT 1 FROM inserted WHERE FechaHoraSalida <= FechaHoraIngreso
---     )
---     BEGIN
---         PRINT 'Error: FechaHoraSalida debe ser mayor a FechaHoraIngreso';
---         ROLLBACK TRANSACTION;
---     END
--- END;
-
--- Trigger para validar que los clientes no puedan registrar mas de tres telefonos (Esto ahora lo validamos a la hora de registrar telefonos.).
--- CREATE TRIGGER trg_LimiteTelefonoCliente
--- ON Telefono
--- AFTER INSERT, UPDATE
--- AS
--- BEGIN
---     SET NOCOUNT ON;
-
---     IF EXISTS (
---         SELECT IdUsuario
---         FROM Telefono
---         GROUP BY IdUsuario
---         HAVING COUNT(IdTelefono) > 3
---     )
---     BEGIN
---         PRINT 'Error: Un cliente no puede tener más de 3 números de teléfono.';
---         ROLLBACK TRANSACTION;
---     END
--- END;
 
 -- Videito sobre procedure: https://www.youtube.com/watch?v=8sCrjt5e2Yk&ab_channel=INFORMATICONFIG
+-- Doc sobre procedure en sql server: https://learn.microsoft.com/en-us/sql/t-sql/statements/create-procedure-transact-sql?view=sql-server-ver16
+
+
+-- ++++++ Nota:
+-- Se tiene que ejecutar los script uno por uno, se me olvido ponerles GO al final a cada uno y 
+-- no se si me va a dar tiempo de ponerselos a todos los procedure.
+-- ++++++ Fin nota.
 -- ========================== Para la tabla de Direccion:
 -- Agregar nuevas direcciones.
 
@@ -676,7 +635,7 @@ BEGIN
     END
     ELSE
     BEGIN
-        SET @Resultado = -1;  -- Error: Relacion no encontrada
+        SET @Resultado = -1;  -- Relacion no encontrada
     END
 END;
 
@@ -702,7 +661,7 @@ BEGIN
         INSERT INTO RedesSociales (Nombre)
         VALUES (@Nombre);
 
-        -- Obtiene el ID recién creado
+        -- Obtiene el ID reciée creado
         SET @NuevoIdRedSocial = SCOPE_IDENTITY();
     END
 END;
@@ -756,7 +715,7 @@ BEGIN
     END
     ELSE
     BEGIN
-        SET @Resultado = -1;  -- Error: La red social está en uso
+        SET @Resultado = -1; 
     END
 END;
 
@@ -939,7 +898,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Solo se valida que el ID de la habitación exista antes de actualizar
+    -- Solo se valida que el ID de la habitacion exista antes de actualizar
     IF EXISTS (SELECT 1 FROM TipoHabitacion WHERE IdTipoHabitacion = @IdTipoHabitacion)
     BEGIN
         UPDATE TipoHabitacion
@@ -956,43 +915,6 @@ BEGIN
         SET @Resultado = -1;  
     END
 END;
-
-
--- CREATE PROCEDURE sp_ActualizarTipoHabitacion
---     @IdTipoHabitacion SMALLINT,
---     @Nombre VARCHAR(40),
---     @Descripcion VARCHAR(150),
---     @IdTipoCama SMALLINT,
---     @Precio FLOAT,
---     @Resultado SMALLINT OUTPUT
--- AS
--- BEGIN
---     SET NOCOUNT ON;
-
---     IF EXISTS (SELECT 1 FROM TipoHabitacion WHERE IdTipoHabitacion = @IdTipoHabitacion)
---     BEGIN
---         -- Validar que el nuevo nombre no este repetido
---         IF NOT EXISTS (SELECT 1 FROM TipoHabitacion WHERE Nombre = @Nombre AND IdTipoHabitacion <> @IdTipoHabitacion)
---         BEGIN
---             UPDATE TipoHabitacion
---             SET Nombre = @Nombre,
---                 Descripcion = @Descripcion,
---                 IdTipoCama = @IdTipoCama,
---                 Precio = @Precio
---             WHERE IdTipoHabitacion = @IdTipoHabitacion;
-
---             SET @Resultado = 1;  
---         END
---         ELSE
---         BEGIN
---             SET @Resultado = -2;  
---         END
---     END
---     ELSE
---     BEGIN
---         SET @Resultado = -1;  
---     END
--- END;
 
 -- Eliminar: (Aparte de que no este en datoshabitacion, se debe de validar que solo la empresa a la que le pertenece, pueda eliminarla.)
 CREATE PROCEDURE sp_EliminarTipoHabitacion
@@ -1088,7 +1010,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Verifica que el número de habitación no esté repetido en la misma empresa, este hay que modificarlo para que sea un join y use el id de empresa
+    -- Verifica que el numero de habitación no este repetido en la misma empresa, este hay que modificarlo para que sea un join y use el id de empresa
     IF NOT EXISTS (SELECT 1 FROM DatosHabitacion WHERE IdTipoHabitacion = @IdTipoHabitacion AND Numero = @Numero)
     BEGIN
         INSERT INTO DatosHabitacion (Numero, IdTipoHabitacion)
@@ -1149,11 +1071,11 @@ BEGIN
     )
     BEGIN
         DELETE FROM DatosHabitacion WHERE IdDatosHabitacion = @IdDatosHabitacion;
-        SET @Resultado = 1;  -- Éxito
+        SET @Resultado = 1; 
     END
     ELSE
     BEGIN
-        SET @Resultado = -1;  -- Error: Habitación aún tiene reservas activas
+        SET @Resultado = -1;  
     END
 END;
 
@@ -1222,7 +1144,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Verifica que la habitación ya no exista en el sistema
+    -- Verifica que la habitacion ya no exista en el sistema
     IF NOT EXISTS (SELECT 1 FROM DatosHabitacion WHERE IdDatosHabitacion = @IdHabitacion)
     BEGIN
         DELETE FROM HabitacionesEmpresa WHERE IdEmpresa = @IdEmpresa AND IdHabitacion = @IdHabitacion;
@@ -1553,7 +1475,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Verifica que el cliente no tenga mas de 3 números registrados
+    -- Verifica que el cliente no tenga mas de 3 numeros registrados
     IF (SELECT COUNT(*) FROM Telefono WHERE IdUsuario = @IdUsuario) < 3
     BEGIN
         INSERT INTO Telefono (IdUsuario, CodigoPais, NumeroTelefonico)
@@ -1609,7 +1531,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Verifica que el teléfono pertenece al usuario y que al menos quede uno registrado
+    -- Verifica que el telefono pertenece al usuario y que al menos quede uno registrado
     IF EXISTS (SELECT 1 FROM Telefono WHERE IdTelefono = @IdTelefono AND IdUsuario = @IdUsuario)
     AND (SELECT COUNT(*) FROM Telefono WHERE IdUsuario = @IdUsuario) > 1
     BEGIN
@@ -1689,7 +1611,7 @@ BEGIN
         -- Validar que la fecha de salida sea mayor a la fecha de ingreso
         IF @FechaHoraSalida > @FechaHoraIngreso
         BEGIN
-            -- Verificar si existe una reservación que choque en el rango de fechas, sin incluir el registro actual
+            -- Verificar si existe una reservacion que choque en el rango de fechas, sin incluir el registro actual
             IF NOT EXISTS (
                 SELECT 1 FROM Reservacion
                 WHERE IdHabitacion = @IdHabitacion
@@ -1739,16 +1661,16 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Verifica que la reservación no esté facturada y que el cliente sea el dueño
+    -- Verifica que la reservacion no este facturada y que el cliente sea el dueño
     IF NOT EXISTS (SELECT 1 FROM Facturacion WHERE IdReservacion = @IdReservacion)
     AND EXISTS (SELECT 1 FROM Reservacion WHERE IdReservacion = @IdReservacion AND IdCliente = @IdCliente)
     BEGIN
         DELETE FROM Reservacion WHERE IdReservacion = @IdReservacion;
-        SET @Resultado = 1;  -- Éxito
+        SET @Resultado = 1;  
     END
     ELSE
     BEGIN
-        SET @Resultado = -1;  -- Error: Reservación facturada o cliente incorrecto
+        SET @Resultado = -1;  
     END
 END;
 
@@ -1908,11 +1830,11 @@ BEGIN
     IF EXISTS (SELECT 1 FROM EmpresaRecreacion WHERE CedulaJuridica = @CedulaJuridica)
     BEGIN
         DELETE FROM EmpresaRecreacion WHERE CedulaJuridica = @CedulaJuridica;
-        SET @Resultado = 1;  -- Éxito
+        SET @Resultado = 1; 
     END
     ELSE
     BEGIN
-        SET @Resultado = -1;  -- Error: Empresa no encontrada
+        SET @Resultado = -1; 
     END
 END;
 
@@ -2569,6 +2491,126 @@ END;
 -- END;
 
 
+
+-- ********** Optener El id de factura, id de reservacion, cantidad de noches y precio total para las facturas mediante distintos filtros.
+-- Optener las facturas por dia.
+CREATE PROCEDURE sp_ConsultarFacturasPorDia
+    @IdEmpresa VARCHAR(15), -- Recibimos el id de la empresa, para usar solo las facturas de habitaciones que pertenecen a esa empresa.
+    @Fecha DATE -- La fecha que vamos a usar.
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT F.IdFacturacion, R.IdReservacion, 
+           DATEDIFF(DAY, R.FechaHoraIngreso, R.FechaHoraSalida) AS NumeroNoches,
+           TH.Precio * DATEDIFF(DAY, R.FechaHoraIngreso, R.FechaHoraSalida) AS ImporteTotal
+    FROM Facturacion F
+    JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+    JOIN HabitacionesEmpresa HE ON R.IdHabitacion = HE.IdHabitacion
+    JOIN DatosHabitacion DH ON R.IdHabitacion = DH.IdDatosHabitacion
+    JOIN TipoHabitacion TH ON DH.IdTipoHabitacion = TH.IdTipoHabitacion
+    WHERE HE.IdEmpresa = @IdEmpresa AND F.FechaFacturacion = @Fecha; -- Revisar solo las que tienen el id de empresa e fecha correctos
+END;
+
+-- Optener las facturas por mes.
+CREATE PROCEDURE sp_ConsultarFacturasPorMes
+    @IdEmpresa VARCHAR(15),-- Recibimos el id de la empresa, para usar solo las facturas de habitaciones que pertenecen a esa empresa.
+    @Mes SMALLINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT F.IdFacturacion, R.IdReservacion, 
+           DATEDIFF(DAY, R.FechaHoraIngreso, R.FechaHoraSalida) AS NumeroNoches,
+           TH.Precio * DATEDIFF(DAY, R.FechaHoraIngreso, R.FechaHoraSalida) AS ImporteTotal
+    FROM Facturacion F
+    JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+    JOIN HabitacionesEmpresa HE ON R.IdHabitacion = HE.IdHabitacion
+    JOIN DatosHabitacion DH ON R.IdHabitacion = DH.IdDatosHabitacion
+    JOIN TipoHabitacion TH ON DH.IdTipoHabitacion = TH.IdTipoHabitacion
+    WHERE HE.IdEmpresa = @IdEmpresa AND MONTH(F.FechaFacturacion) = @Mes; -- Revisar el id de la empresa y el numero del mes.
+END;
+
+
+-- Optener las facturas por año.
+CREATE PROCEDURE sp_ConsultarFacturasPorAnio
+    @IdEmpresa VARCHAR(15), -- Recibimos el id de la empresa, para usar solo las facturas de habitaciones que pertenecen a esa empresa.
+    @Anio SMALLINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT F.IdFacturacion, R.IdReservacion, 
+           DATEDIFF(DAY, R.FechaHoraIngreso, R.FechaHoraSalida) AS NumeroNoches,
+           TH.Precio * DATEDIFF(DAY, R.FechaHoraIngreso, R.FechaHoraSalida) AS ImporteTotal
+    FROM Facturacion F
+    JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+    JOIN HabitacionesEmpresa HE ON R.IdHabitacion = HE.IdHabitacion
+    JOIN DatosHabitacion DH ON R.IdHabitacion = DH.IdDatosHabitacion
+    JOIN TipoHabitacion TH ON DH.IdTipoHabitacion = TH.IdTipoHabitacion
+    WHERE HE.IdEmpresa = @IdEmpresa AND YEAR(F.FechaFacturacion) = @Anio; -- Revisar el id y el año.
+END;
+
+-- Optener las facturas por rango de fechas.
+CREATE PROCEDURE sp_ConsultarFacturasPorRangoFechas
+    @IdEmpresa VARCHAR(15), -- Recibimos el id de la empresa, para usar solo las facturas de habitaciones que pertenecen a esa empresa.
+    @FechaInicio DATE,
+    @FechaFin DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT F.IdFacturacion, R.IdReservacion, 
+           DATEDIFF(DAY, R.FechaHoraIngreso, R.FechaHoraSalida) AS NumeroNoches,
+           TH.Precio * DATEDIFF(DAY, R.FechaHoraIngreso, R.FechaHoraSalida) AS ImporteTotal
+    FROM Facturacion F
+    JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+    JOIN HabitacionesEmpresa HE ON R.IdHabitacion = HE.IdHabitacion
+    JOIN DatosHabitacion DH ON R.IdHabitacion = DH.IdDatosHabitacion
+    JOIN TipoHabitacion TH ON DH.IdTipoHabitacion = TH.IdTipoHabitacion
+    WHERE HE.IdEmpresa = @IdEmpresa AND F.FechaFacturacion BETWEEN @FechaInicio AND @FechaFin; -- Fechas en el rango indicado
+END;
+
+-- Optener las facturas de un tipo de habitacion especifico.
+CREATE PROCEDURE sp_ConsultarFacturasPorTipoHabitacion
+    @IdEmpresa VARCHAR(15),  -- Recibimos el id de la empresa, para usar solo las facturas de habitaciones que pertenecen a esa empresa.
+    @IdTipoHabitacion SMALLINT -- El tipo de habitacion a buscar.
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT F.IdFacturacion, R.IdReservacion, 
+           DATEDIFF(DAY, R.FechaHoraIngreso, R.FechaHoraSalida) AS NumeroNoches,
+           TH.Precio * DATEDIFF(DAY, R.FechaHoraIngreso, R.FechaHoraSalida) AS ImporteTotal
+    FROM Facturacion F
+    JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+    JOIN HabitacionesEmpresa HE ON R.IdHabitacion = HE.IdHabitacion
+    JOIN DatosHabitacion DH ON R.IdHabitacion = DH.IdDatosHabitacion
+    JOIN TipoHabitacion TH ON DH.IdTipoHabitacion = TH.IdTipoHabitacion
+    JOIN TipoHabitacionEmpresa TE ON TH.IdTipoHabitacion = TE.IdTipoHabitacion
+    WHERE TE.IdEmpresa = @IdEmpresa AND TE.IdTipoHabitacion = @IdTipoHabitacion; -- revisamos que el tipo pertenezca a la empresa y optenemos sus facturas.
+END;
+
+-- Optener facturas para una habitacion especifica.
+CREATE PROCEDURE sp_ConsultarFacturasPorHabitacion
+    @IdEmpresa VARCHAR(15), -- Recibimos el id de la empresa, para usar solo las facturas de habitaciones que pertenecen a esa empresa.
+    @IdHabitacion SMALLINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT F.IdFacturacion, R.IdReservacion, 
+           DATEDIFF(DAY, R.FechaHoraIngreso, R.FechaHoraSalida) AS NumeroNoches,
+           TH.Precio * DATEDIFF(DAY, R.FechaHoraIngreso, R.FechaHoraSalida) AS ImporteTotal
+    FROM Facturacion F
+    JOIN Reservacion R ON F.IdReservacion = R.IdReservacion
+    JOIN HabitacionesEmpresa HE ON R.IdHabitacion = HE.IdHabitacion
+    JOIN DatosHabitacion DH ON R.IdHabitacion = DH.IdDatosHabitacion
+    JOIN TipoHabitacion TH ON DH.IdTipoHabitacion = TH.IdTipoHabitacion
+    WHERE HE.IdEmpresa = @IdEmpresa AND HE.IdHabitacion = @IdHabitacion;
+END;
+
+
 -- ======================= Algunas busquedas para empresa de hospedaje ===================================
 -- Buscar empresa por su id:
 CREATE PROCEDURE sp_ObtenerDatosEmpresaHospedaje
@@ -2596,7 +2638,7 @@ BEGIN
     LEFT JOIN ListaServiciosHospedaje LSH ON E.CedulaJuridica = LSH.IdEmpresa
     LEFT JOIN ServiciosEstablecimiento SE ON LSH.IdServicio = SE.IdServicio
     WHERE E.CedulaJuridica = @IdEmpresa
-    -- Agrupasmos por lo de los valores similares.
+    -- Agrupamos por lo del String concatenado.
     GROUP BY E.CedulaJuridica, E.NombreHotel, E.IdTipoHotel, E.ReferenciaGPS,
              D.IdDireccion, D.Provincia, D.Canton, D.Distrito, D.Barrio, D.SeñasExactas,
              E.Telefono;
